@@ -1,0 +1,45 @@
+name: Deploy to GCP VM
+
+on:
+  push:
+    branches: [main]
+
+env:
+  TARGET_DIR: ${{ vars.TARGET_DIR || '~/connect4-web' }}
+  SYSTEMD_SERVICE: ${{ vars.SYSTEMD_SERVICE || 'connect4' }}
+  GCS_MODEL_URI: ${{ secrets.GCS_MODEL_URI }} # e.g. gs://your-bucket/model.onnx
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up SSH
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.GCP_SSH_PRIVATE_KEY }}
+
+      - name: Add VM to known hosts
+        run: ssh-keyscan -H ${{ secrets.GCP_VM_HOST }} >> ~/.ssh/known_hosts
+
+      - name: Deploy Application Code
+        run: |
+          ssh ${{ secrets.GCP_VM_USER }}@${{ secrets.GCP_VM_HOST }} << EOF
+            cd ${{ env.TARGET_DIR }}
+            git pull origin main
+            
+            # Setup virtual environment and deploy
+            python3 -m venv .venv --system-site-packages 2>/dev/null || true
+            .venv/bin/pip install -r requirements.txt
+            
+            # Restart the service to apply changes
+            sudo systemctl restart ${{ env.SYSTEMD_SERVICE }}
+          EOF
+
+      - name: Update ONNX Model Weight
+        if: env.GCS_MODEL_URI != ''
+        run: |
+          ssh ${{ secrets.GCP_VM_USER }}@${{ secrets.GCP_VM_HOST }} \
+            "gsutil cp ${{ env.GCS_MODEL_URI }} ${{ env.TARGET_DIR }}/model.onnx"

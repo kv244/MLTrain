@@ -1,0 +1,227 @@
+/* css */
+:root {
+    --bg-color: #0d1117;
+    --panel-bg: rgba(22, 27, 34, 0.7);
+    --border-color: #30363d;
+    --text-color: #c9d1d9;
+    --text-heading: #f0f6fc;
+    --primary-color: #238636;
+    --primary-hover: #2ea043;
+    --accent-color: #58a6ff;
+    
+    /* Connect 4 specific */
+    --board-bg: rgba(30, 60, 120, 0.85); /* Glassy Blue */
+    --player-1: #ff4757; /* Red */
+    --player-2: #eccc68; /* Yellow */
+    --spot-empty: #1a1e23;
+}
+
+* {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+    font-family: 'Inter', sans-serif;
+}
+
+body {
+    background: linear-gradient(135deg, #0f121b 0%, #1a1e2a 100%);
+    color: var(--text-color);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    min-height: 100vh;
+    padding: 2rem;
+}
+
+.app-container {
+    width: 100%;
+    max-width: 800px;
+    background: var(--panel-bg);
+    border: 1px solid var(--border-color);
+    border-radius: 16px;
+    padding: 2rem;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+    backdrop-filter: blur(10px);
+}
+
+.game-header {
+    text-align: center;
+    margin-bottom: 2rem;
+}
+
+.game-header h1 {
+    color: var(--text-heading);
+    font-size: 2.5rem;
+    background: -webkit-linear-gradient(#58a6ff, #1f6feb);
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+}
+
+.subtitle {
+    font-size: 0.9rem;
+    color: #8b949e;
+}
+
+/* Control Panel */
+.control-panel {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 1.5rem;
+    margin-bottom: 2rem;
+    background: rgba(0, 0, 0, 0.2);
+    padding: 1.5rem;
+    border-radius: 12px;
+}
+
+.control-group {
+    flex: 1;
+    min-width: 250px;
+}
+
+label {
+    display: block;
+    font-size: 0.85rem;
+    font-weight: 600;
+    margin-bottom: 0.5rem;
+    color: var(--text-heading);
+}
+
+.styled-select {
+    width: 100%;
+    padding: 0.75rem;
+    border-radius: 8px;
+    background: #0d1117;
+    border: 1px solid var(--border-color);
+    color: var(--text-color);
+    font-size: 1rem;
+    appearance: none;
+    outline: none;
+}
+
+.slider-wrapper {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+}
+
+input[type=range] {
+    flex: 1;
+    accent-color: var(--accent-color);
+}
+
+.action-buttons {
+    width: 100%;
+    display: flex;
+    gap: 1rem;
+    justify-content: center;
+}
+
+.btn {
+    padding: 0.75rem 1.5rem;
+    font-size: 1rem;
+    font-weight: 600;
+    border: none;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.primary-btn {
+    background-color: var(--player-1);
+    color: white;
+}
+.primary-btn:hover { background-color: #ff6b81; transform: translateY(-2px); }
+
+.secondary-btn {
+    background-color: var(--player-2);
+    color: #333;
+}
+.secondary-btn:hover { background-color: #fffa65; transform: translateY(-2px); }
+
+/* Game Area */
+.hidden { display: none !important; }
+
+.board-container {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 1.5rem;
+}
+
+.status-bar {
+    text-align: center;
+    width: 100%;
+}
+
+.player-turn-badge {
+    display: inline-block;
+    padding: 0.5rem 1.5rem;
+    border-radius: 20px;
+    font-weight: bold;
+    margin-top: 0.5rem;
+    transition: background-color 0.3s;
+}
+
+.turn-p1 { background-color: var(--player-1); color: white; }
+.turn-p2 { background-color: var(--player-2); color: #333; }
+.turn-ai { background-color: var(--accent-color); color: white; animation: pulse 1.5s infinite; }
+
+@keyframes pulse {
+    0% { transform: scale(1); opacity: 1; }
+    50% { transform: scale(1.05); opacity: 0.8; }
+    100% { transform: scale(1); opacity: 1; }
+}
+
+/* Connect 4 Board Grid */
+.connect4-board {
+    display: flex;
+    gap: 10px;
+    background-color: var(--board-bg);
+    padding: 15px;
+    border-radius: 16px;
+    box-shadow: 0 20px 50px rgba(0, 0, 0, 0.6);
+    backdrop-filter: blur(8px);
+}
+
+/* Columns for hover effects */
+.column {
+    display: flex;
+    flex-direction: column-reverse; /* Bottom up indexing */
+    gap: 10px;
+    cursor: pointer;
+    border-radius: 30px;
+    transition: background-color 0.2s;
+}
+
+.column:hover {
+    background-color: rgba(255, 255, 255, 0.1);
+}
+
+.spot {
+    width: 60px;
+    height: 60px;
+    border-radius: 50%;
+    background-color: var(--spot-empty);
+    box-shadow: inset 0 3px 6px rgba(0, 0, 0, 0.8), 0 1px 1px rgba(255, 255, 255, 0.1);
+    transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275); /* bounce effect */
+}
+
+/* Chip states */
+.chip-1 {
+    background: radial-gradient(circle at 30% 30%, #ff6b81, var(--player-1));
+    box-shadow: 0 4px 8px rgba(255, 71, 87, 0.5);
+}
+
+.chip-2 {
+    background: radial-gradient(circle at 30% 30%, #fffa65, var(--player-2));
+    box-shadow: 0 4px 8px rgba(236, 204, 104, 0.5);
+}
+
+/* Disabled board interaction */
+.disabled {
+    pointer-events: none;
+}
+.disabled .column:hover {
+    background-color: transparent;
+}

@@ -1,0 +1,8 @@
+flask
+Flask-Limiter
+torch
+numpy
+openvino
+flake8
+networkx
+python-dotenv

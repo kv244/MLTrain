@@ -1,0 +1,25 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+env/
+venv/
+ENV/
+
+# Model Files
+*.pt
+*.onnx
+*.onnx.data
+
+# PyInstaller / Build
+build/
+dist/
+*.egg-info/
+
+# Environment variables
+.env
+
+# Logs and Data
+*.csv
+*.log

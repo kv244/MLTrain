@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Connect 4 AlphaZero</title>
+    <!-- Use a modern, premium font from Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+    <div class="app-container">
+        
+        <!-- Header Section -->
+        <header class="game-header">
+            <h1>Connect 4 AI</h1>
+            <p class="subtitle">Powered by MCTS & AlphaZero</p>
+        </header>
+
+        <!-- Sidebar / Top controls -->
+        <div class="control-panel">
+            <div class="control-group">
+                <label for="modelSelect">Engine Version</label>
+                <select id="modelSelect" class="styled-select">
+                    <option value="">Loading models...</option>
+                </select>
+            </div>
+            
+            <div class="control-group">
+                <label for="simulationSlider">AI Thinking Depth (MCTS)</label>
+                <div class="slider-wrapper">
+                    <input type="range" id="simulationSlider" min="10" max="2000" step="10" value="400">
+                    <span id="simulationValue">400</span> <span>simulations</span>
+                </div>
+            </div>
+
+            <!-- Start Game Controls -->
+             <div class="action-buttons">
+                <button id="btnPlayerFirst" class="btn primary-btn">You Play First (X)</button>
+                <button id="btnAiFirst" class="btn secondary-btn">AI Plays First (O)</button>
+             </div>
+             
+             <!-- Stats Panel -->
+             <div class="stats-panel" style="margin-top: 1.5rem; background: rgba(0,0,0,0.3); padding: 1rem; border-radius: 8px;">
+                <h3 style="color: var(--text-heading); font-size: 1rem; margin-bottom: 0.8rem; border-bottom: 1px solid var(--border-color); padding-bottom: 0.5rem;">Session Stats</h3>
+                <div style="display: flex; justify-content: space-between; margin-bottom: 0.5rem;">
+                    <span style="font-weight: 600;">Hardware:</span>
+                    <span id="hardwareBadge" style="color: var(--accent-color);">Loading...</span>
+                </div>
+                <div style="display: flex; justify-content: space-between; margin-bottom: 0.5rem;">
+                    <span style="font-weight: 600;">Games Played:</span>
+                    <span id="statGames">0</span>
+                </div>
+                <div style="display: flex; justify-content: space-between; margin-bottom: 0.5rem;">
+                    <span style="font-weight: 600; color: var(--player-1);">Your Victories:</span>
+                    <span id="statPlayerWins">0</span>
+                </div>
+                <div style="display: flex; justify-content: space-between;">
+                    <span style="font-weight: 600; color: var(--player-2);">AI Victories:</span>
+                    <span id="statAiWins">0</span>
+                </div>
+             </div>
+        </div>
+
+        <!-- Main Game Area -->
+        <main class="board-container hidden" id="boardArea">
+            <div class="status-bar" id="statusBar">
+                <h2>Choose a column to play!</h2>
+                <div class="player-turn-badge" id="turnBadge">Your Turn</div>
+            </div>
+
+            <!-- The Connect 4 Grid -->
+            <div class="connect4-board" id="c4Board">
+                <!-- Columns and spots will be injected by JavaScript -->
+            </div>
+            
+            <button id="btnReset" class="btn secondary-btn btn-small mt-loose hidden">Restart Game</button>
+        </main>
+
+    </div>
+
+    <!-- Scripts -->
+    <script src="/static/script.js"></script>
+</body>
+</html>

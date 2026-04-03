@@ -1,0 +1,182 @@
+import os
+import glob
+import time
+import csv
+import torch
+import numpy as np
+from flask import Flask, request, jsonify, render_template
+from flask_limiter import Limiter
+from flask_limiter.util import get_remote_address
+import openvino as ov
+from dotenv import load_dotenv
+
+load_dotenv()
+
+from mcts import Connect4, run_mcts_simulations
+
+app = Flask(__name__)
+RATE_LIMITS = os.environ.get("RATE_LIMIT", "500 per day;200 per hour;15 per minute").split(";")
+LIMITER_STORAGE = os.environ.get("LIMITER_STORAGE_URI", "memory://")
+
+limiter = Limiter(
+    get_remote_address,
+    app=app,
+    default_limits=RATE_LIMITS,
+    storage_uri=LIMITER_STORAGE
+)
+
+# Cache models to avoid reloading them constantly
+# This is a small optimization for web responsiveness.
+LOADED_MODELS = {}
+device = torch.device("cpu") # PyTorch tensor device for CPU memory handling
+
+def get_ov_device():
+    core = ov.Core()
+    available = core.available_devices
+    if "NPU" in available: return "npu"
+    if "GPU" in available: return "gpu"
+    return "cpu"
+
+GLOBAL_OV_DEVICE = get_ov_device()
+
+class OpenVINOModel:
+    """A wrapper to make an OpenVINO model behave like a PyTorch model for inference."""
+    def __init__(self, model_path: str, device: str = "AUTO"):
+        core = ov.Core()
+        
+        # Check available devices to prioritize NPU
+        available_devices = core.available_devices
+        if "NPU" in available_devices:
+            device = "NPU"
+        elif "GPU" in available_devices:
+            device = "GPU"
+        else:
+            device = "CPU"
+            
+        print(f"OpenVINO initializing on device: {device} (Available: {available_devices})")
+        
+        ov_model = core.read_model(model=model_path)
+        self.compiled_model = core.compile_model(model=ov_model, device_name=device)
+        self.policy_output = self.compiled_model.output("policy")
+        self.value_output = self.compiled_model.output("value")
+
+    def __call__(self, x: torch.Tensor):
+        x_np = x.cpu().numpy()
+        result = self.compiled_model([x_np])
+        return torch.from_numpy(result[self.policy_output]), \
+               torch.from_numpy(result[self.value_output])
+
+    def eval(self):
+        pass
+
+def get_model(checkpoint_path):
+    """Loads a compiled OpenVINO `.onnx` file or retrieves it from cache."""
+    if checkpoint_path not in LOADED_MODELS:
+        try:
+            model = OpenVINOModel(checkpoint_path)
+            LOADED_MODELS[checkpoint_path] = model
+        except Exception as e:
+            return None, str(e)
+    return LOADED_MODELS[checkpoint_path], None
+
+@app.route("/")
+def index():
+    return render_template("index.html")
+
+@app.route("/api/info")
+def get_info():
+    """Returns runtime hardware info to the frontend."""
+    return jsonify({"device": GLOBAL_OV_DEVICE})
+
+@app.route("/api/game_end", methods=["POST"])
+def log_game_end():
+    """Receives and logs game outcome telemtry."""
+    data = request.json
+    winner = data.get("winner", "unknown")
+    model_version = data.get("model", "unknown")
+    
+    results_file = os.environ.get("RESULTS_LOG_PATH", "game_results.csv")
+    file_exists = os.path.isfile(results_file)
+    with open(results_file, mode='a', newline='') as csv_file:
+        writer = csv.writer(csv_file)
+        if not file_exists:
+            writer.writerow(["timestamp", "model", "winner"])
+        writer.writerow([time.strftime("%Y-%m-%dT%H:%M:%S"), model_version, winner])
+        
+    return jsonify({"success": True})
+
+@app.route("/api/models")
+def list_models():
+    """Lists all available model checkpoints in the main directory."""
+    # Find all .onnx files in the directory
+    models = glob.glob("*.onnx")
+    # Sort descending so highest iteration is first
+    models.sort(reverse=True)
+    return jsonify({"models": models})
+
+@app.route("/api/move", methods=["POST"])
+# Default limit is inherited from default_limits, allowing environment injection globally
+def get_move():
+    """Calculates the best move using the model + MCTS search."""
+    data = request.json
+    checkpoint = data.get("model", "")
+    board_state = data.get("board", []) 
+    current_player = data.get("current_player", -1) 
+    simulations = data.get("simulations", 400)
+    
+    if not os.path.exists(checkpoint):
+        return jsonify({"error": f"Model {checkpoint} not found"}), 404
+
+    model, error = get_model(checkpoint)
+    if error:
+        return jsonify({"error": f"Failed to load model: {error}"}), 500
+
+    # Reconstruct the game state for the Python engine
+    game = Connect4()
+    
+    # 1. Provide the board state as a 6x7 numpy array
+    game.board = np.array(board_state, dtype=np.int8)
+    # Numpy arrays from lists will be [6, 7], Python expects [r][c].
+    game.current_player = current_player
+
+    print(f"Evaluating board using {checkpoint} for player {current_player}...")
+
+    start_time = time.time()
+    mcts_probs = run_mcts_simulations(
+        game, model, device,
+        num_sims=simulations,
+        temperature=0,             # Greedy, we want the *best* move
+        add_dirichlet_noise=False  # No exploration in production play
+    )
+    inference_time = time.time() - start_time
+    
+    # Write telemetry to CSV
+    telemetry_file = os.environ.get("TELEMETRY_LOG_PATH", "telemetry.csv")
+    file_exists = os.path.isfile(telemetry_file)
+    with open(telemetry_file, mode='a', newline='') as csv_file:
+        writer = csv.writer(csv_file)
+        if not file_exists:
+            writer.writerow(["timestamp", "model", "simulations", "inference_time_seconds"])
+        writer.writerow([time.strftime("%Y-%m-%dT%H:%M:%S"), checkpoint, simulations, f"{inference_time:.4f}"])
+    
+    best_move = int(np.argmax(mcts_probs))
+    
+    return jsonify({
+        "move": best_move,
+        "probs": [float(p) for p in mcts_probs],
+        "inference_time_ms": inference_time * 1000
+    })
+
+if __name__ == "__main__":
+    # Create templates and static directories if they don't exist
+    os.makedirs("templates", exist_ok=True)
+    os.makedirs("static", exist_ok=True)
+    
+    print("\nStarting Connect 4 AI Server...")
+    print(f"Device: {device}")
+    
+    app_host = os.environ.get("APP_HOST", "127.0.0.1")
+    app_port = int(os.environ.get("APP_PORT", 5000))
+    app_debug = os.environ.get("FLASK_DEBUG", "True").lower() == "true"
+    
+    app.run(debug=app_debug, host=app_host, port=app_port)
