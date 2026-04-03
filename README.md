@@ -1,5 +1,8 @@
 # Connect 4 AlphaZero on RTX 4070
 
+[![Deploy to GCP VM](https://github.com/kv244/MLTrain/actions/workflows/deploy.yml/badge.svg)](https://github.com/kv244/MLTrain/actions/workflows/deploy.yml)
+[![Lint Codebase](https://github.com/kv244/MLTrain/actions/workflows/lint.yml/badge.svg)](https://github.com/kv244/MLTrain/actions/workflows/lint.yml)
+
 This project implements the AlphaZero algorithm to train a neural network to play Connect 4. The training loop is heavily optimized for modern NVIDIA GPUs (like the RTX 4070) by using batched MCTS, mixed-precision training, and Tensor Core acceleration.
 
 ## Prerequisites
