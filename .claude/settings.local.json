@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(tasklist /FI \"IMAGENAME eq node.exe\" /FO TABLE)",
+      "Bash(node \"C:/Users/julia/MCPServer/index.js\" --version)"
+    ]
+  }
+}

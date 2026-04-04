@@ -4,6 +4,8 @@ import time
 import csv
 import torch
 import numpy as np
+import pathlib
+import threading
 from flask import Flask, request, jsonify, render_template
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
@@ -32,6 +34,19 @@ limiter = Limiter(
 @app.errorhandler(429)
 def ratelimit_handler(e):
     return jsonify(error="Too Many Requests", description=str(e.description)), 429
+
+MODELS_DIR = pathlib.Path(".").resolve()
+_csv_lock = threading.Lock()
+
+def _resolve_checkpoint(name: str):
+    """Return safe absolute path or None if invalid."""
+    try:
+        safe = (MODELS_DIR / pathlib.Path(name).name).resolve()
+    except Exception:
+        return None
+    if safe.parent != MODELS_DIR or safe.suffix != ".onnx":
+        return None
+    return safe
 
 
 # Cache models to avoid reloading them constantly
@@ -106,11 +121,12 @@ def log_game_end():
     
     results_file = os.environ.get("RESULTS_LOG_PATH", "game_results.csv")
     file_exists = os.path.isfile(results_file)
-    with open(results_file, mode='a', newline='') as csv_file:
-        writer = csv.writer(csv_file)
-        if not file_exists:
-            writer.writerow(["timestamp", "model", "winner"])
-        writer.writerow([time.strftime("%Y-%m-%dT%H:%M:%S"), model_version, winner])
+    with _csv_lock:
+        with open(results_file, mode='a', newline='') as csv_file:
+            writer = csv.writer(csv_file)
+            if not file_exists:
+                writer.writerow(["timestamp", "model", "winner"])
+            writer.writerow([time.strftime("%Y-%m-%dT%H:%M:%S"), model_version, winner])
         
     return jsonify({"success": True})
 
@@ -128,27 +144,33 @@ def list_models():
 def get_move():
     """Calculates the best move using the model + MCTS search."""
     data = request.json
-    checkpoint = data.get("model", "")
+    checkpoint_name = data.get("model", "")
     board_state = data.get("board", []) 
     current_player = data.get("current_player", -1) 
-    simulations = data.get("simulations", 400)
+    simulations = max(1, min(int(data.get("simulations", 400)), 800))
     
-    if not os.path.exists(checkpoint):
-        return jsonify({"error": f"Model {checkpoint} not found"}), 404
+    checkpoint = _resolve_checkpoint(checkpoint_name)
+    if not checkpoint:
+        return jsonify({"error": "Invalid model"}), 400
 
-    model, error = get_model(checkpoint)
+    # Validate board state
+    board_arr = np.array(board_state, dtype=np.int8)
+    if board_arr.shape != (6, 7) or not np.all(np.isin(board_arr, [-1, 0, 1])):
+        return jsonify({"error": "Invalid board state"}), 400
+
+    model, error = get_model(str(checkpoint))
     if error:
         return jsonify({"error": f"Failed to load model: {error}"}), 500
 
     # Reconstruct the game state for the Python engine
     game = Connect4()
     
-    # 1. Provide the board state as a 6x7 numpy array
-    game.board = np.array(board_state, dtype=np.int8)
+    # 1. Provide the board state
+    game.board = board_arr
     # Numpy arrays from lists will be [6, 7], Python expects [r][c].
     game.current_player = current_player
 
-    print(f"Evaluating board using {checkpoint} for player {current_player}...")
+    print(f"Evaluating board using {checkpoint_name} for player {current_player}...")
 
     start_time = time.time()
     mcts_probs = run_mcts_simulations(
@@ -162,11 +184,12 @@ def get_move():
     # Write telemetry to CSV
     telemetry_file = os.environ.get("TELEMETRY_LOG_PATH", "telemetry.csv")
     file_exists = os.path.isfile(telemetry_file)
-    with open(telemetry_file, mode='a', newline='') as csv_file:
-        writer = csv.writer(csv_file)
-        if not file_exists:
-            writer.writerow(["timestamp", "model", "simulations", "inference_time_seconds"])
-        writer.writerow([time.strftime("%Y-%m-%dT%H:%M:%S"), checkpoint, simulations, f"{inference_time:.4f}"])
+    with _csv_lock:
+        with open(telemetry_file, mode='a', newline='') as csv_file:
+            writer = csv.writer(csv_file)
+            if not file_exists:
+                writer.writerow(["timestamp", "model", "simulations", "inference_time_seconds"])
+            writer.writerow([time.strftime("%Y-%m-%dT%H:%M:%S"), checkpoint_name, simulations, f"{inference_time:.4f}"])
     
     best_move = int(np.argmax(mcts_probs))
     
@@ -180,21 +203,27 @@ def get_move():
 def assess_move():
     """Evaluates a specific move against the AI's best recommended move."""
     data = request.json
-    checkpoint = data.get("model", "")
+    checkpoint_name = data.get("model", "")
     board_state = data.get("board", []) # This should be the board BEFORE the move
     move = data.get("move", -1)
     current_player = data.get("current_player", 1)
-    simulations = data.get("simulations", 400)
+    simulations = max(1, min(int(data.get("simulations", 400)), 800))
 
-    if not os.path.exists(checkpoint):
-        return jsonify({"error": f"Model {checkpoint} not found"}), 404
+    checkpoint = _resolve_checkpoint(checkpoint_name)
+    if not checkpoint:
+        return jsonify({"error": "Invalid model"}), 400
 
-    model, error = get_model(checkpoint)
+    # Validate board state
+    board_arr = np.array(board_state, dtype=np.int8)
+    if board_arr.shape != (6, 7) or not np.all(np.isin(board_arr, [-1, 0, 1])):
+        return jsonify({"error": "Invalid board state"}), 400
+
+    model, error = get_model(str(checkpoint))
     if error:
         return jsonify({"error": f"Failed to load model: {error}"}), 500
 
     game = Connect4()
-    game.board = np.array(board_state, dtype=np.int8)
+    game.board = board_arr
     game.current_player = current_player
 
     # Get AI's opinion on this state
@@ -227,6 +256,10 @@ def assess_move():
         "probs": [float(p) for p in mcts_probs]
     })
 
+@app.route("/health")
+def health():
+    return jsonify({"status": "ok"}), 200
+
 if __name__ == "__main__":
     # Create templates and static directories if they don't exist
     os.makedirs("templates", exist_ok=True)
@@ -237,6 +270,6 @@ if __name__ == "__main__":
     
     app_host = os.environ.get("APP_HOST", "127.0.0.1")
     app_port = int(os.environ.get("APP_PORT", 5000))
-    app_debug = os.environ.get("FLASK_DEBUG", "True").lower() == "true"
+    app_debug = os.environ.get("FLASK_DEBUG", "False").lower() == "true"
     
     app.run(debug=app_debug, host=app_host, port=app_port)

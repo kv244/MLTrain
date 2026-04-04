@@ -26,7 +26,7 @@ jobs:
 
       - name: Deploy Application Code
         run: |
-          ssh ${{ secrets.GCP_VM_USER }}@${{ secrets.GCP_VM_HOST }} << EOF
+          ssh ${{ secrets.GCP_VM_USER }}@${{ secrets.GCP_VM_HOST }} << 'EOF'
             cd ${{ env.TARGET_DIR }}
             git pull origin main
             
@@ -37,6 +37,12 @@ jobs:
             # Restart the service to apply changes
             sudo systemctl restart ${{ env.SYSTEMD_SERVICE }}
           EOF
+
+      - name: Health check
+        run: |
+          ssh ${{ secrets.GCP_VM_USER }}@${{ secrets.GCP_VM_HOST }} \
+            "sleep 4 && systemctl is-active --quiet ${{ env.SYSTEMD_SERVICE }} \
+             && echo 'Service is running' || (journalctl -u ${{ env.SYSTEMD_SERVICE }} -n 20 --no-pager; exit 1)"
 
       - name: Update ONNX Model Weight
         if: env.GCS_MODEL_URI != ''
