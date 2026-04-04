@@ -27,11 +27,14 @@
             </div>
             
             <div class="control-group">
-                <label for="simulationSlider">AI Thinking Depth (MCTS)</label>
-                <div class="slider-wrapper">
-                    <input type="range" id="simulationSlider" min="10" max="2000" step="10" value="400">
-                    <span id="simulationValue">400</span> <span>simulations</span>
-                </div>
+                <label for="difficultySelect">AI Calculation Depth</label>
+                <select id="difficultySelect" class="styled-select">
+                    <option value="50">Leisure (Fastest)</option>
+                    <option value="400" selected>Standard (Balanced)</option>
+                    <option value="800">Tactical (Skilled)</option>
+                    <option value="1200">Expert (Slow)</option>
+                    <option value="2000">Cyber-God (Resource Intensive)</option>
+                </select>
             </div>
 
             <!-- Start Game Controls -->
@@ -41,23 +44,25 @@
              </div>
              
              <!-- Stats Panel -->
-             <div class="stats-panel" style="margin-top: 1.5rem; background: rgba(0,0,0,0.3); padding: 1rem; border-radius: 8px;">
-                <h3 style="color: var(--text-heading); font-size: 1rem; margin-bottom: 0.8rem; border-bottom: 1px solid var(--border-color); padding-bottom: 0.5rem;">Session Stats</h3>
-                <div style="display: flex; justify-content: space-between; margin-bottom: 0.5rem;">
-                    <span style="font-weight: 600;">Hardware:</span>
-                    <span id="hardwareBadge" style="color: var(--accent-color);">Loading...</span>
-                </div>
-                <div style="display: flex; justify-content: space-between; margin-bottom: 0.5rem;">
-                    <span style="font-weight: 600;">Games Played:</span>
-                    <span id="statGames">0</span>
-                </div>
-                <div style="display: flex; justify-content: space-between; margin-bottom: 0.5rem;">
-                    <span style="font-weight: 600; color: var(--player-1);">Your Victories:</span>
-                    <span id="statPlayerWins">0</span>
-                </div>
-                <div style="display: flex; justify-content: space-between;">
-                    <span style="font-weight: 600; color: var(--player-2);">AI Victories:</span>
-                    <span id="statAiWins">0</span>
+             <div class="stats-panel">
+                <h3 class="stats-title">Session Stats</h3>
+                <div class="stats-grid">
+                    <div class="stat-item">
+                        <span class="stat-label">Hardware:</span>
+                        <span id="hardwareBadge" class="stat-value highlight">...</span>
+                    </div>
+                    <div class="stat-item">
+                        <span class="stat-label">Total Games:</span>
+                        <span id="statGames" class="stat-value">0</span>
+                    </div>
+                    <div class="stat-item">
+                        <span class="stat-label" style="color: var(--player-1);">Your Wins:</span>
+                        <span id="statPlayerWins" class="stat-value">0</span>
+                    </div>
+                    <div class="stat-item">
+                        <span class="stat-label" style="color: var(--player-2);">AI Wins:</span>
+                        <span id="statAiWins" class="stat-value">0</span>
+                    </div>
                 </div>
              </div>
         </div>

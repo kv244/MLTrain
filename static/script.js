@@ -18,8 +18,7 @@ function updateStatsUI() {
 // DOM Elements
 const _board = document.getElementById('c4Board');
 const _modelSelect = document.getElementById('modelSelect');
-const _simSlider = document.getElementById('simulationSlider');
-const _simValue = document.getElementById('simulationValue');
+const _difficultySelect = document.getElementById('difficultySelect');
 const _badge = document.getElementById('turnBadge');
 const _boardArea = document.getElementById('boardArea');
 const _btnReset = document.getElementById('btnReset');
@@ -29,10 +28,7 @@ document.addEventListener("DOMContentLoaded", () => {
     updateStatsUI();
     loadModels();
     
-    // Bind slider
-    _simSlider.addEventListener('input', (e) => {
-        _simValue.innerText = e.target.value;
-    });
+    
 
     // Start controls
     document.getElementById('btnPlayerFirst').addEventListener('click', () => startGame(1));
@@ -159,7 +155,7 @@ async function fetchAssessment(prevBoard, move) {
                 board: prevBoard,
                 move: move,
                 current_player: humanPlayer,
-                simulations: parseInt(_simSlider.value)
+                simulations: parseInt(_difficultySelect.value)
             })
         });
 
@@ -231,7 +227,7 @@ async function triggerAiMove() {
             model: _modelSelect.value,
             board: board,
             current_player: currentPlayer,
-            simulations: parseInt(_simSlider.value)
+            simulations: parseInt(_difficultySelect.value)
         };
 
         const res = await fetch('/api/move', {

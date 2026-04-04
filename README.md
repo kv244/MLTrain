@@ -314,3 +314,7 @@ Set a threshold (e.g. $20/month) — GCP will email you before you're surprised.
 - [ ] **User Authentication:** Add a login system to restrict access and save player game statistics.
 - [ ] **Monetization Strategy:** Consider adding subtle ads or a premium model to cover hosting costs.
 - [ ] **Move History:** Add a feature to download or replay past games from the UI.
+- [ ] **Real-time Analytics:** Show how many users are currently connected and playing.
+- [ ] **Global Player Map:** Add a window showing which country players are connecting from (GeoIP).
+- [ ] **SQLite Integration:** Implement a robust database for game results and telemetry to replace the current CSV system.
+- [ ] **Dynamic Environment:** Renew the background once a week by asking Gemini for a new cyberpunk image.

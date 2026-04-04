@@ -155,7 +155,7 @@ def get_move():
     checkpoint_name = data.get("model", "")
     board_state = data.get("board", []) 
     current_player = data.get("current_player", -1) 
-    simulations = max(1, min(int(data.get("simulations", 400)), 800))
+    simulations = max(1, min(int(data.get("simulations", 400)), 2048))
     
     checkpoint = _resolve_checkpoint(checkpoint_name)
     if not checkpoint:
@@ -215,7 +215,7 @@ def assess_move():
     board_state = data.get("board", []) # This should be the board BEFORE the move
     move = data.get("move", -1)
     current_player = data.get("current_player", 1)
-    simulations = max(1, min(int(data.get("simulations", 400)), 800))
+    simulations = max(1, min(int(data.get("simulations", 400)), 2048))
 
     checkpoint = _resolve_checkpoint(checkpoint_name)
     if not checkpoint:
