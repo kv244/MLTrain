@@ -7,6 +7,7 @@ import numpy as np
 from flask import Flask, request, jsonify, render_template
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
+from werkzeug.middleware.proxy_fix import ProxyFix
 import openvino as ov
 from dotenv import load_dotenv
 
@@ -15,6 +16,9 @@ load_dotenv()
 from mcts import Connect4, run_mcts_simulations
 
 app = Flask(__name__)
+# Tell Flask to trust X-Forwarded-For headers from Nginx
+app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1, x_prefix=1)
+
 RATE_LIMITS = os.environ.get("RATE_LIMIT", "500 per day;200 per hour;15 per minute").split(";")
 LIMITER_STORAGE = os.environ.get("LIMITER_STORAGE_URI", "memory://")
 
@@ -165,6 +169,57 @@ def get_move():
         "move": best_move,
         "probs": [float(p) for p in mcts_probs],
         "inference_time_ms": inference_time * 1000
+    })
+
+@app.route("/api/assess", methods=["POST"])
+def assess_move():
+    """Evaluates a specific move against the AI's best recommended move."""
+    data = request.json
+    checkpoint = data.get("model", "")
+    board_state = data.get("board", []) # This should be the board BEFORE the move
+    move = data.get("move", -1)
+    current_player = data.get("current_player", 1)
+    simulations = data.get("simulations", 400)
+
+    if not os.path.exists(checkpoint):
+        return jsonify({"error": f"Model {checkpoint} not found"}), 404
+
+    model, error = get_model(checkpoint)
+    if error:
+        return jsonify({"error": f"Failed to load model: {error}"}), 500
+
+    game = Connect4()
+    game.board = np.array(board_state, dtype=np.int8)
+    game.current_player = current_player
+
+    # Get AI's opinion on this state
+    mcts_probs = run_mcts_simulations(
+        game, model, device,
+        num_sims=simulations,
+        temperature=0,
+        add_dirichlet_noise=False
+    )
+    
+    max_p = np.max(mcts_probs)
+    p_move = mcts_probs[move]
+    
+    # Matching the logic in play.py
+    if p_move >= 0.95 * max_p:
+        score, comment = 5, "Brilliant! (Best Move)"
+    elif p_move >= 0.70 * max_p:
+        score, comment = 4, "Strong Move"
+    elif p_move >= 0.30 * max_p:
+        score, comment = 3, "Decent"
+    elif p_move >= 0.05 * max_p:
+        score, comment = 2, "Inaccurate"
+    else:
+        score, comment = 1, "Blunder!"
+
+    return jsonify({
+        "score": score,
+        "comment": comment,
+        "best_move": int(np.argmax(mcts_probs)),
+        "probs": [float(p) for p in mcts_probs]
     })
 
 if __name__ == "__main__":

@@ -123,7 +123,7 @@ GCP VM: pull Flask app → download model → restart service
 On your local machine after training:
 ```bash
 python export_onnx.py --checkpoint checkpoint_0190.pt --output model.onnx
-gsutil cp model.onnx gs://your-bucket/model.onnx
+gsutil cp model.onnx gs://<YOUR_BUCKET>/model.onnx
 ```
 
 ### Step 2: Set up the Flask app as a systemd service on the VM
@@ -136,9 +136,9 @@ Description=Connect4 Flask App
 After=network.target
 
 [Service]
-User=razvan_petrescu
-WorkingDirectory=/home/razvan_petrescu/connect4-web
-ExecStart=/home/razvan_petrescu/connect4-web/.venv/bin/python app.py
+User=<VM_USER>
+WorkingDirectory=/home/<VM_USER>/mltrain
+ExecStart=/home/<VM_USER>/mltrain/.venv/bin/python app.py
 Restart=always
 
 [Install]
@@ -182,7 +182,7 @@ jobs:
       - name: Deploy
         run: |
           ssh ${{ secrets.GCP_VM_USER }}@${{ secrets.GCP_VM_HOST }} << 'EOF'
-            cd ~/connect4-web
+            cd ~/mltrain
             git pull origin main
             python3 -m venv .venv --system-site-packages 2>/dev/null || true
             .venv/bin/pip install -r requirements.txt
@@ -192,7 +192,7 @@ jobs:
       - name: Update model (if changed)
         run: |
           ssh ${{ secrets.GCP_VM_USER }}@${{ secrets.GCP_VM_HOST }} \
-            "gsutil cp gs://your-bucket/model.onnx ~/connect4-web/model.onnx"
+            "gsutil cp gs://<YOUR_BUCKET>/model.onnx ~/mltrain/model.onnx"
 ```
 
 ### GitHub Secrets
@@ -203,7 +203,7 @@ Go to your Flask repo → **Settings → Secrets and variables → Actions → N
 |---|---|
 | `GCP_SSH_PRIVATE_KEY` | Full contents of your local `~/.ssh/id_ed25519` (including `-----BEGIN...-----` and `-----END...-----` lines) |
 | `GCP_VM_HOST` | VM's external IP |
-| `GCP_VM_USER` | Your Unix username on the VM (GCP converts dots to underscores, e.g. `razvan.petrescu@gmail.com` → `razvan_petrescu`) |
+| `GCP_VM_USER` | Your Unix username on the VM (GCP converts dots to underscores, e.g. `user.name@gmail.com` → `user_name`) |
 
 ### Setting up the SSH key
 

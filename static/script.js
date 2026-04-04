@@ -104,6 +104,7 @@ function startGame(human_role) {
     gameOver = false;
     
     initBoard();
+    clearAssessment();
     
     _boardArea.classList.remove('hidden');
     _btnReset.classList.add('hidden');
@@ -120,18 +121,20 @@ function startGame(human_role) {
 async function handleColumnClick(c) {
     if (gameOver || currentPlayer !== humanPlayer) return;
 
-    // Check if column is full (top row is index 5 or 0 depending on logic, our row 5 is top visually but array wise 0 is top if Python logic is used?
-    // Wait, Python logic: for row in reversed(range(6)): if board[row, col] == 0...
-    // So row 5 is bottom, row 0 is top.
-    
     // Check if row 0 (top) is empty
     if (board[0][c] !== 0) return;
+
+    // PRE-MOVE: Save state for assessment
+    const boardBefore = JSON.parse(JSON.stringify(board));
 
     // Play move visually and internally
     const r = getLowestEmptyRow(c);
     if (r === -1) return;
 
     playMove(r, c, humanPlayer);
+
+    // FETCH ASSESSMENT (Sequential to avoid server crash)
+    await fetchAssessment(boardBefore, c);
 
     if (checkWinResult(r, c, humanPlayer)) {
         endGame("You Win!");
@@ -144,6 +147,58 @@ async function handleColumnClick(c) {
     currentPlayer *= -1;
     updateTurnUI();
     triggerAiMove();
+}
+
+async function fetchAssessment(prevBoard, move) {
+    try {
+        const res = await fetch('/api/assess', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({
+                model: _modelSelect.value,
+                board: prevBoard,
+                move: move,
+                current_player: humanPlayer,
+                simulations: parseInt(_simSlider.value)
+            })
+        });
+        const data = await res.json();
+        if (data.score) {
+            showAssessment(data);
+        }
+    } catch (e) {
+        console.error("Assessment failed", e);
+    }
+}
+
+function showAssessment(data) {
+    console.log("Showing assessment UI:", data);
+    const container = document.getElementById('assessmentContainer');
+    container.innerHTML = `
+        <div class="assessment-badge">
+            <div class="stars">
+                ${'★'.repeat(data.score).split('').map(s => `<span class="star-filled">${s}</span>`).join('')}
+                ${'☆'.repeat(5-data.score).split('').map(s => `<span class="star-empty">${s}</span>`).join('')}
+            </div>
+            <div class="comment-text">${data.comment}</div>
+        </div>
+    `;
+    
+    // Highlight best move if it was a blunder (score <= 2)
+    clearBestMoveHint();
+    if (data.score <= 2) {
+        const bestCol = document.querySelector(`.column[data-col="${data.best_move}"]`);
+        if (bestCol) bestCol.classList.add('best-move-hint');
+    }
+}
+
+function clearAssessment() {
+    document.getElementById('assessmentContainer').innerHTML = '';
+    clearBestMoveHint();
+}
+
+function clearBestMoveHint() {
+    document.querySelectorAll('.column').forEach(c => c.classList.remove('best-move-hint'));
 }
 
 function getLowestEmptyRow(c) {

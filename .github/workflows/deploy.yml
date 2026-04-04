@@ -5,7 +5,7 @@ on:
     branches: [main]
 
 env:
-  TARGET_DIR: ${{ vars.TARGET_DIR || '~/connect4-web' }}
+  TARGET_DIR: ${{ vars.TARGET_DIR || '~/mltrain' }}
   SYSTEMD_SERVICE: ${{ vars.SYSTEMD_SERVICE || 'connect4' }}
   GCS_MODEL_URI: ${{ secrets.GCS_MODEL_URI }} # e.g. gs://your-bucket/model.onnx
 

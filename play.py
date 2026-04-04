@@ -8,7 +8,7 @@ Example:
 import argparse
 import torch
 import numpy as np
-import openvino.runtime as ov
+import openvino as ov
 
 from model import AlphaNet
 from mcts import Connect4, run_mcts_simulations, print_board
@@ -101,7 +101,32 @@ def main():
         print_board(game)
 
         if game.current_player == human_player:
+            # ── Human Move Evaluation ──
+            print("Analyzing best options...")
+            mcts_probs = run_mcts_simulations(
+                game, model, device,
+                num_sims=args.simulations,
+                temperature=0,
+                add_dirichlet_noise=False,
+            )
+            max_p = np.max(mcts_probs)
+            
             move = get_human_move(game)
+            
+            # Assessment Logic
+            p_move = mcts_probs[move]
+            if p_move >= 0.95 * max_p:
+                score, comment = 5, "Brilliant! (Best Move)"
+            elif p_move >= 0.70 * max_p:
+                score, comment = 4, "Strong Move"
+            elif p_move >= 0.30 * max_p:
+                score, comment = 3, "Decent"
+            elif p_move >= 0.05 * max_p:
+                score, comment = 2, "Inaccurate"
+            else:
+                score, comment = 1, "Blunder!"
+            
+            print(f"Assessment: {'★' * score}{'☆' * (5-score)} — {comment}")
         else:
             print("AI is thinking...")
             # For AI moves, use MCTS with temperature=0 to be greedy

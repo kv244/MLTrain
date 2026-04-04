@@ -17,6 +17,7 @@ RTX 4070 optimisations:
 import os
 import glob
 import random
+import datetime
 from collections import deque
 
 import torch
@@ -37,10 +38,13 @@ TOTAL_ITERATIONS     = 301
 CHECKPOINT_EVERY     = 10
 
 # ── Device & model ────────────────────────────────────────────────────────────
+def get_timestamp():
+    return datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 if device.type == "cuda":
     torch.backends.cudnn.benchmark = True
-print(f"Using device: {device}")
+print(f"[{get_timestamp()}] Using device: {device}")
 
 model     = AlphaNet().to(device)
 optimizer = torch.optim.Adam(model.parameters(), lr=LEARNING_RATE, weight_decay=WEIGHT_DECAY)
@@ -50,7 +54,7 @@ start_iteration = 0
 pretrained_checkpoints = sorted(glob.glob("checkpoint_*.pt"))
 if pretrained_checkpoints:
     latest_ckpt = pretrained_checkpoints[-1]
-    print(f"Resuming from {latest_ckpt}...")
+    print(f"[{get_timestamp()}] Resuming from {latest_ckpt}...")
     ckpt_data = torch.load(latest_ckpt, map_location=device)
     if 'model_state_dict' in ckpt_data:
         model.load_state_dict(ckpt_data['model_state_dict'])
@@ -73,14 +77,23 @@ import sys
 if sys.platform != "win32":
     try:
         model = torch.compile(model)
-        print("torch.compile: enabled")
+        print(f"[{get_timestamp()}] torch.compile: enabled")
     except Exception:
-        print("torch.compile: unavailable (PyTorch < 2.0), skipping")
+        print(f"[{get_timestamp()}] torch.compile: unavailable (PyTorch < 2.0), skipping")
 else:
-    print("torch.compile: disabled on Windows due to Triton compatibility")
+    print(f"[{get_timestamp()}] torch.compile: disabled on Windows due to Triton compatibility")
 
 memory: deque = deque(maxlen=REPLAY_BUFFER_SIZE)
 
+BUFFER_PATH = "replay_buffer.pt"
+if os.path.exists(BUFFER_PATH):
+    try:
+        print(f"[{get_timestamp()}] Loading replay buffer from {BUFFER_PATH}...")
+        saved_memory = torch.load(BUFFER_PATH, map_location="cpu")
+        memory.extend(saved_memory)
+        print(f"[{get_timestamp()}] Buffer loaded: {len(memory):,} states")
+    except Exception as e:
+        print(f"[{get_timestamp()}] Warning: Could not load replay buffer: {e}")
 
 # ── Utilities ─────────────────────────────────────────────────────────────────
 
@@ -138,7 +151,7 @@ if __name__ == "__main__":
         )
         memory.extend(game_data)
 
-        print(f"[{iteration:3d}] +{len(game_data):,} states  buffer={len(memory):,}", end="")
+        print(f"[{get_timestamp()}] [{iteration:3d}] +{len(game_data):,} states  buffer={len(memory):,}", end="")
 
         # ── Phase 2: Training ─────────────────────────────────────────────────
         if len(memory) >= BATCH_SIZE:
@@ -183,7 +196,11 @@ if __name__ == "__main__":
                     'optimizer_state_dict': optimizer.state_dict(),
                     'scaler_state_dict': scaler.state_dict(),
                 }, path)
-                print(f"          → saved {path}")
+                print(f"[{get_timestamp()}]           → saved {path}")
+
+                # Persistent Buffer: ensures self-play data survives restarts
+                torch.save(list(memory), BUFFER_PATH)
+                print(f"[{get_timestamp()}]           → updated {BUFFER_PATH}")
         else:
             print(f"  |  (warming up, need {BATCH_SIZE} samples)")
 

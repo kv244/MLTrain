@@ -461,7 +461,7 @@ def visualize_game_trajectory(model: AlphaNet, output_dir: str = "."):
         else:
             masked_probs[valid] = 1.0 / len(valid)
             
-        best_move = valid[np.argmax(masked_probs)]
+        best_move = int(np.argmax(masked_probs))
         r, c = game.play(best_move)
         
         if game.check_win(r, c):
