@@ -29,6 +29,11 @@ limiter = Limiter(
     storage_uri=LIMITER_STORAGE
 )
 
+@app.errorhandler(429)
+def ratelimit_handler(e):
+    return jsonify(error="Too Many Requests", description=str(e.description)), 429
+
+
 # Cache models to avoid reloading them constantly
 # This is a small optimization for web responsiveness.
 LOADED_MODELS = {}

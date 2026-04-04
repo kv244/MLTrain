@@ -162,12 +162,19 @@ async function fetchAssessment(prevBoard, move) {
                 simulations: parseInt(_simSlider.value)
             })
         });
+
+        if (!res.ok) {
+            const errData = await res.json().catch(() => ({}));
+            console.error("Assessment API error:", res.status, errData);
+            return;
+        }
+
         const data = await res.json();
         if (data.score) {
             showAssessment(data);
         }
     } catch (e) {
-        console.error("Assessment failed", e);
+        console.error("Assessment failed due to network error", e);
     }
 }
 
@@ -232,6 +239,23 @@ async function triggerAiMove() {
             headers: {'Content-Type': 'application/json'},
             body: JSON.stringify(payload)
         });
+
+        if (!res.ok) {
+            let errorMsg = "Server Error";
+            try {
+               const data = await res.json();
+               errorMsg = data.error || data.description || `Error ${res.status}`;
+            } catch(e) {
+               errorMsg = `HTTP Error ${res.status}`;
+            }
+            
+            if (res.status === 429) {
+               endGame("Rate Limit Exceeded");
+            } else {
+               endGame(errorMsg);
+            }
+            return;
+        }
 
         const data = await res.json();
         
