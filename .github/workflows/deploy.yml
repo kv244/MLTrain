@@ -42,4 +42,5 @@ jobs:
         if: env.GCS_MODEL_URI != ''
         run: |
           ssh ${{ secrets.GCP_VM_USER }}@${{ secrets.GCP_VM_HOST }} \
-            "gsutil cp ${{ env.GCS_MODEL_URI }} ${{ env.TARGET_DIR }}/model.onnx"
+            "gsutil cp ${{ env.GCS_MODEL_URI }} ${{ env.TARGET_DIR }}/model.onnx && \
+             gsutil cp ${{ env.GCS_MODEL_URI }}.data ${{ env.TARGET_DIR }}/model.onnx.data"
