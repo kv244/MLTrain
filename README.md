@@ -217,6 +217,18 @@ cat ~/.ssh/id_ed25519.pub  # public key → add to GCP VM
 
 Add the public key to the VM via **GCP Console → Compute Engine → VM instances → click your VM → Edit → SSH Keys → Add item**.
 
+#### 🔑 Manual Key Authorization (Highly Recommended)
+If you get a `Permission denied (publickey)` error, you must add it manually on the VM:
+```bash
+# 1. SSH into the VM and open the authorized keys file
+mkdir -p ~/.ssh && chmod 700 ~/.ssh
+nano ~/.ssh/authorized_keys
+
+# 2. Paste the contents of your id_ed25519.pub as a new line at the bottom
+# 3. Save and Exit (Ctrl+O, Enter, Ctrl+X), then set permissions:
+chmod 600 ~/.ssh/authorized_keys
+```
+
 ### Firewall rule
 
 **GCP Console → VPC Network → Firewall → Create Firewall Rule:**
@@ -296,3 +308,9 @@ Set a budget alert so you're notified before costs spiral:
 **GCP Console → Billing → Budgets & alerts → Create budget**
 
 Set a threshold (e.g. $20/month) — GCP will email you before you're surprised. The e2-medium is a fixed ~$25/month with no autoscaling, so the real risk is CPU overload slowing the app, not an unbounded bill.
+
+### 🚀 Future Roadmap & TODOs
+- [ ] **Secure Connection (HTTPS):** Register a domain name and set up SSL certificates via Let's Encrypt (Certbot).
+- [ ] **User Authentication:** Add a login system to restrict access and save player game statistics.
+- [ ] **Monetization Strategy:** Consider adding subtle ads or a premium model to cover hosting costs.
+- [ ] **Move History:** Add a feature to download or replay past games from the UI.
