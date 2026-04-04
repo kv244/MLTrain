@@ -237,15 +237,21 @@ def assess_move():
     max_p = np.max(mcts_probs)
     p_move = mcts_probs[move]
     
-    # Matching the logic in play.py
-    if p_move >= 0.95 * max_p:
+    # Extended assessment logic for more nuance
+    if p_move >= 0.98 * max_p:
         score, comment = 5, "Brilliant! (Best Move)"
-    elif p_move >= 0.70 * max_p:
-        score, comment = 4, "Strong Move"
+    elif p_move >= 0.90 * max_p:
+        score, comment = 4, "Great Move"
+    elif p_move >= 0.75 * max_p:
+        score, comment = 4, "Strong"
+    elif p_move >= 0.50 * max_p:
+        score, comment = 3, "Solid"
     elif p_move >= 0.30 * max_p:
-        score, comment = 3, "Decent"
-    elif p_move >= 0.05 * max_p:
+        score, comment = 3, "Standard"
+    elif p_move >= 0.15 * max_p:
         score, comment = 2, "Inaccurate"
+    elif p_move >= 0.05 * max_p:
+        score, comment = 2, "Mistake"
     else:
         score, comment = 1, "Blunder!"
 
