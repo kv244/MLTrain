@@ -15,6 +15,9 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
+VERSION = "1.0.2"
+LAST_COMMIT = "2026-04-04 08:32 UTC"
+
 from mcts import Connect4, run_mcts_simulations
 
 app = Flask(__name__)
@@ -80,7 +83,12 @@ class OpenVINOModel:
         print(f"OpenVINO initializing on device: {device} (Available: {available_devices})")
         
         ov_model = core.read_model(model=model_path)
-        self.compiled_model = core.compile_model(model=ov_model, device_name=device)
+        # Latency hint is best for interactive applications like games
+        self.compiled_model = core.compile_model(
+            model=ov_model, 
+            device_name=device,
+            config={"PERFORMANCE_HINT": "LATENCY"}
+        )
         self.policy_output = self.compiled_model.output("policy")
         self.value_output = self.compiled_model.output("value")
 
@@ -278,4 +286,10 @@ if __name__ == "__main__":
     app_port = int(os.environ.get("APP_PORT", 5000))
     app_debug = os.environ.get("FLASK_DEBUG", "False").lower() == "true"
     
+    # Pre-fetch the latest model to avoid cold-start latency for the first user
+    initial_models = sorted(glob.glob("*.onnx"), reverse=True)
+    if initial_models:
+        print(f"Pre-loading latest checkpoint for optimization: {initial_models[0]}")
+        get_model(initial_models[0])
+
     app.run(debug=app_debug, host=app_host, port=app_port)
