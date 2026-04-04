@@ -420,3 +420,100 @@ input[type=range] {
     background-color: rgba(35, 134, 54, 0.4) !important;
     box-shadow: 0 0 15px var(--primary-color);
 }
+
+/* --- Mobile Responsiveness (MAX-WIDTH: 600PX) --- */
+@media (max-width: 600px) {
+    body {
+        padding: 0.5rem;
+    }
+
+    .app-container {
+        padding: 1rem;
+        border-radius: 8px;
+    }
+
+    .game-header h1 {
+        font-size: 1.8rem;
+    }
+
+    .game-header {
+        margin-bottom: 1rem;
+    }
+
+    .control-panel {
+        padding: 1rem;
+        gap: 1rem;
+    }
+
+    .control-group {
+        min-width: 100%; /* Stack controls on mobile */
+    }
+
+    .action-buttons {
+        flex-direction: column;
+    }
+
+    .btn {
+        width: 100%;
+    }
+
+    .stats-grid {
+        gap: 0.5rem;
+    }
+
+    .stat-value {
+        font-size: 0.9rem;
+    }
+
+    /* --- Fluid Board Scaling --- */
+    .connect4-board {
+        padding: 10px;
+        gap: 5px;
+        border-width: 1px;
+    }
+
+    .column {
+        gap: 5px;
+    }
+
+    .spot {
+        width: 10.5vw; 
+        height: 10.5vw;
+        max-width: 50px;
+        max-height: 50px;
+        min-width: 32px;
+        min-height: 32px;
+    }
+
+    /* Scale Corner Brackets to match smaller board */
+    .connect4-board::before, .connect4-board::after {
+        width: 30px;
+        height: 30px;
+        border-width: 2px;
+    }
+
+    .connect4-board::before { top: -5px; left: -5px; }
+    .connect4-board::after { bottom: -5px; right: -5px; }
+
+    /* Match chip size to fluid spot size */
+    .chip-1::before, .chip-2::before {
+        top: 10%; left: 10%; right: 10%; bottom: 10%;
+    }
+}
+
+/* Very small screens (iPhone SE, etc.) */
+@media (max-width: 380px) {
+    .spot {
+        width: 11vw;
+        height: 11vw;
+    }
+    
+    .connect4-board {
+        padding: 6px;
+        gap: 4px;
+    }
+    
+    .column {
+        gap: 4px;
+    }
+}
