@@ -1,7 +1,7 @@
 /* css */
 :root {
     --bg-color: #050510;
-    --panel-bg: rgba(10, 10, 25, 0.85);
+    --panel-bg: rgba(10, 10, 25, 0.45);
     --border-color: #1a1e23;
     --text-color: #c9d1d9;
     --text-heading: #f0f6fc;
@@ -13,7 +13,7 @@
     --neon-cyan: #00e5ff;
     --neon-magenta: #ff00ff;
     --neon-lime: #39ff14;
-    --board-bg: rgba(5, 5, 20, 0.95);
+    --board-bg: rgba(5, 5, 20, 0.6);
     --player-1: #ff2d55; /* Electric Pink/Red */
     --player-2: #ffe700; /* Electric Yellow/Gold */
     --spot-empty: #0a0a1a;
@@ -90,7 +90,7 @@ body::after {
     flex-wrap: wrap;
     gap: 1.5rem;
     margin-bottom: 2rem;
-    background: rgba(0, 0, 0, 0.2);
+    background: rgba(0, 0, 0, 0.1);
     padding: 1.5rem;
     border-radius: 12px;
 }
