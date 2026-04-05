@@ -14,7 +14,7 @@ load_dotenv()
 # Configuration
 BG_PATH = pathlib.Path("static/cyberpunk_bg.png").resolve()
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
-PROJECT_ID = os.environ.get("GCP_PROJECT_ID", "mltrain-demo") # Fallback for local testing
+PROJECT_ID = os.environ.get("GCP_PROJECT_ID", "gen-lang-client-0269785868") # Actual project ID
 LOCATION = "us-central1"
 
 def is_background_stale(days=7):

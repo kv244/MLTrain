@@ -10,3 +10,4 @@ networkx
 python-dotenv
 google-generativeai
 google-cloud-aiplatform
+Pillow

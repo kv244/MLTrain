@@ -217,17 +217,28 @@ cat ~/.ssh/id_ed25519.pub  # public key → add to GCP VM
 
 Add the public key to the VM via **GCP Console → Compute Engine → VM instances → click your VM → Edit → SSH Keys → Add item**.
 
-#### 🔑 Manual Key Authorization (Highly Recommended)
-If you get a `Permission denied (publickey)` error, you must add it manually on the VM:
-```bash
-# 1. SSH into the VM and open the authorized keys file
-mkdir -p ~/.ssh && chmod 700 ~/.ssh
-nano ~/.ssh/authorized_keys
+### Troubleshooting Common Deployment Errors
 
-# 2. Paste the contents of your id_ed25519.pub as a new line at the bottom
-# 3. Save and Exit (Ctrl+O, Enter, Ctrl+X), then set permissions:
-chmod 600 ~/.ssh/authorized_keys
-```
+#### ❌ Error: Permission denied (publickey)
+This usually means the SSH key in GitHub Secrets does not match the `authorized_keys` file on the VM, or there is a **Username Mismatch**.
+1.  **Check the User**: In GitHub Secrets, `GCP_VM_USER` must be `razvan_petrescu` (underscore).
+2.  **Verify the Key**: Ensure the private key in `GCP_SSH_PRIVATE_KEY` was copied directly from the local `id_deploy_final` file (not the chat terminal).
+3.  **Manual Authorization**: If still failing, re-run the manual authorization command:
+    ```bash
+    echo "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIJUOGRtwL6yFjNCAA0e/v+ttBM9gzwzfTH3Tk/rLVUQD connect4-deploy" >> ~/.ssh/authorized_keys
+    ```
+
+#### ❌ Error: 502 Bad Gateway
+This means the Gunicorn/Flask app failed to start.
+1.  **Missing Dependencies**: Run `sudo journalctl -u connect4 -n 50` on the VM. If you see `ModuleNotFoundError: No module named 'PIL'`, ensure `Pillow` is in your `requirements.txt`.
+2.  **Port 5000 Bind**: Ensure no other process is using port 5000 (`sudo ss -tlnp | grep 5000`).
+
+### 🛡️ Production Authentication & User Management
+
+**The Dot vs. Underscore Issue**:
+GCP often maps email-based SSH keys to a user with a dot (e.g., `razvan.petrescu`). However, the application and service are configured to run as `razvan_petrescu` (underscore).
+*   **Best Practice**: Always target the **underscore** user for deployment.
+*   **Manual Fix**: Always append the public key to `/home/razvan_petrescu/.ssh/authorized_keys` manually rather than relying solely on the GCP Console's "SSH Keys" metadata table, which can be inconsistent with OS Login.
 
 ### Firewall rule
 
@@ -310,11 +321,12 @@ Set a budget alert so you're notified before costs spiral:
 Set a threshold (e.g. $20/month) — GCP will email you before you're surprised. The e2-medium is a fixed ~$25/month with no autoscaling, so the real risk is CPU overload slowing the app, not an unbounded bill.
 
 ### 🚀 Future Roadmap & TODOs
-- [ ] **Secure Connection (HTTPS):** Register a domain name and set up SSL certificates via Let's Encrypt (Certbot).
+- [x] **Secure Connection (HTTPS):** Registered a domain name and set up SSL certificates via Let's Encrypt (Certbot).
 - [ ] **User Authentication:** Add a login system to restrict access and save player game statistics.
 - [ ] **Monetization Strategy:** Consider adding subtle ads or a premium model to cover hosting costs.
 - [ ] **Move History:** Add a feature to download or replay past games from the UI.
 - [ ] **Real-time Analytics:** Show how many users are currently connected and playing.
 - [ ] **Global Player Map:** Add a window showing which country players are connecting from (GeoIP).
 - [ ] **SQLite Integration:** Implement a robust database for game results and telemetry to replace the current CSV system.
-- [ ] **Dynamic Environment:** Renew the background once a week by asking Gemini for a new cyberpunk image.
+- [x] **Dynamic Environment:** Renew the background once a week by asking Gemini for a new cyberpunk image. (Implemented via `background_manager.py`).
+- [x] **Root Cause Analysis (RCA):** Completed detailed analysis of the April 2026 deployment outages.
