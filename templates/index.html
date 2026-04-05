@@ -6,9 +6,13 @@
     <title>Connect 4 AlphaZero</title>
     <!-- Use a modern, premium font from Google Fonts -->
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="/static/style.css">
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='win-effects.css') }}">
+    <!-- OpenVINO runtime is handled on the backend now, no need for heavy frontend models -->
 </head>
-<body>
+<body class="cyberpunk-theme">
+    <div id="glitchOverlay"></div>
+    <div class="background-container" id="bgContainer"></div>
     <div class="app-container">
         
         <!-- Header Section -->
@@ -86,6 +90,7 @@
     </div>
 
     <!-- Scripts -->
-    <script src="/static/script.js"></script>
+    <script src="{{ url_for('static', filename='win-effects.js') }}"></script>
+    <script src="{{ url_for('static', filename='script.js') }}"></script>
 </body>
 </html>

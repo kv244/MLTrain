@@ -101,6 +101,7 @@ function startGame(human_role) {
     
     initBoard();
     clearAssessment();
+    WinEffects.reset();
     
     _boardArea.classList.remove('hidden');
     _btnReset.classList.add('hidden');
@@ -138,8 +139,9 @@ async function handleColumnClick(c) {
     // FETCH ASSESSMENT (Sequential to avoid server crash)
     await fetchAssessment(boardBefore, c, humanPlayer); // FIX 13: pass current mover
 
-    if (checkWinResult(r, c, humanPlayer)) {
-        endGame("You Win!");
+    const winningLine = checkWinResult(r, c, humanPlayer);
+    if (winningLine) {
+        endGame("You Win!", winningLine);
         return;
     } else if (isDraw()) {
         endGame("It's a Draw!");
@@ -295,8 +297,9 @@ async function triggerAiMove() {
 
         playMove(row, col, currentPlayer);
 
-        if (checkWinResult(row, col, currentPlayer)) {
-            endGame("AI Wins!");
+        const winningLine = checkWinResult(row, col, currentPlayer);
+        if (winningLine) {
+            endGame("AI Wins!", winningLine);
             return;
         } else if (isDraw()) {
             endGame("It's a Draw!");
@@ -323,14 +326,14 @@ function checkWinResult(r, c, player) {
             let nc = c + dc * sign;
             
             while (nr >= 0 && nr < ROWS && nc >= 0 && nc < COLS && board[nr][nc] === player) {
-                count++;
+                line.push([nr, nc]);
                 nr += dr * sign;
                 nc += dc * sign;
             }
         }
-        if (count >= 4) return true;
+        if (line.length >= 4) return line;
     }
-    return false;
+    return null;
 }
 
 function isDraw() {
@@ -353,7 +356,7 @@ function updateTurnUI() {
     }
 }
 
-function endGame(message) {
+function endGame(message, winningLine = null) {
     gameOver = true;
     _board.classList.add('disabled');
     
@@ -372,6 +375,11 @@ function endGame(message) {
         _badge.classList.add('turn-p2');
         stats.ai++;
         winnerId = "ai";
+    }
+
+    // Trigger randomized win effect if there is a winner
+    if (winnerId !== "draw" && winningLine) {
+        WinEffects.triggerRandom(winnerId, winningLine);
     }
 
     if (winnerId !== "draw" || message.includes("Draw")) {
