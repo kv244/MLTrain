@@ -24,7 +24,8 @@ import torch
 import torch.nn.functional as F
 
 from model import AlphaNet
-from self_play import run_batched_self_play
+from self_play import run_batched_self_play, _history_to_training_data
+from mcts import run_mcts_simulations, Connect4
 
 # ── Hyper-parameters ──────────────────────────────────────────────────────────
 PARALLEL_GAMES       = 64        # games played simultaneously per self-play phase
@@ -36,6 +37,8 @@ LEARNING_RATE        = 1e-3
 WEIGHT_DECAY         = 1e-4
 TOTAL_ITERATIONS     = 301
 CHECKPOINT_EVERY     = 10
+EVAL_GAMES           = 20
+EVAL_EVERY           = 20
 
 # ── Device & model ────────────────────────────────────────────────────────────
 def get_timestamp():
@@ -55,7 +58,7 @@ pretrained_checkpoints = sorted(glob.glob("checkpoint_*.pt"))
 if pretrained_checkpoints:
     latest_ckpt = pretrained_checkpoints[-1]
     print(f"[{get_timestamp()}] Resuming from {latest_ckpt}...")
-    ckpt_data = torch.load(latest_ckpt, map_location=device)
+    ckpt_data = torch.load(latest_ckpt, map_location=device, weights_only=True)
     if 'model_state_dict' in ckpt_data:
         model.load_state_dict(ckpt_data['model_state_dict'])
     if 'optimizer_state_dict' in ckpt_data:
@@ -64,6 +67,9 @@ if pretrained_checkpoints:
         scaler.load_state_dict(ckpt_data['scaler_state_dict'])
     if 'iteration' in ckpt_data:
         start_iteration = ckpt_data['iteration'] + 1
+
+best_ckpt_path = pretrained_checkpoints[-1] if pretrained_checkpoints else None
+import numpy as np
 
 # LR schedule: drop by 10× at iteration 100, again at 150.
 # Keeps updates aggressive early, then stabilises loss in late training.
@@ -89,7 +95,7 @@ BUFFER_PATH = "replay_buffer.pt"
 if os.path.exists(BUFFER_PATH):
     try:
         print(f"[{get_timestamp()}] Loading replay buffer from {BUFFER_PATH}...")
-        saved_memory = torch.load(BUFFER_PATH, map_location="cpu")
+        saved_memory = torch.load(BUFFER_PATH, map_location="cpu", weights_only=True)
         memory.extend(saved_memory)
         print(f"[{get_timestamp()}] Buffer loaded: {len(memory):,} states")
     except Exception as e:
@@ -137,6 +143,40 @@ def train_step(states, target_p, target_v):
     return loss.item(), policy_loss.item(), value_loss.item()
 
 
+def evaluate_model(current_model, best_model, device, n_games=EVAL_GAMES):
+    """
+    Play games between current model (+1) and best model (-1).
+    Returns win rate for current model (wins=1, draws=0.5).
+    """
+    current_model.eval()
+    best_model.eval()
+    wins = 0
+
+    for i in range(n_games):
+        game = Connect4()
+        # Alternate who goes first
+        current_player_at_start = 1 if i % 2 == 0 else -1
+        
+        while True:
+            # Use 50 sims for fast evaluation
+            active_model = current_model if game.current_player == 1 else best_model
+            mcts_probs = run_mcts_simulations(
+                game, active_model, device,
+                num_sims=50, temperature=0, add_dirichlet_noise=False
+            )
+            move = int(np.argmax(mcts_probs))
+            r, c = game.play(move)
+
+            if game.check_win(r, c):
+                if game.current_player == -1: # Current model just moved and won
+                    wins += 1
+                break
+            if not game.get_valid_moves():
+                wins += 0.5
+                break
+                
+    return wins / n_games
+
 # ── Master loop ───────────────────────────────────────────────────────────────
 
 if __name__ == "__main__":
@@ -162,7 +202,6 @@ if __name__ == "__main__":
                 dataset,
                 batch_size=BATCH_SIZE,
                 shuffle=True,
-                pin_memory=True,
                 num_workers=0
             )
             
@@ -201,8 +240,34 @@ if __name__ == "__main__":
                 # Persistent Buffer: ensures self-play data survives restarts
                 torch.save(list(memory), BUFFER_PATH)
                 print(f"[{get_timestamp()}]           → updated {BUFFER_PATH}")
-        else:
-            print(f"  |  (warming up, need {BATCH_SIZE} samples)")
+            # ── Phase 3: Champion Gating ──────────────────────────────────────
+            if iteration > 0 and iteration % EVAL_EVERY == 0 and best_ckpt_path:
+                print(f"[{get_timestamp()}] Evaluation against {best_ckpt_path}...")
+                eval_model = AlphaNet().to(device)
+                eval_ckpt = torch.load(best_ckpt_path, map_location=device, weights_only=True)
+                eval_model.load_state_dict(eval_ckpt['model_state_dict'])
+                
+                win_rate = evaluate_model(model, eval_model, device)
+                print(f"[{get_timestamp()}] Evaluation result: {win_rate*100:.1f}% win rate")
+                
+                if win_rate > 0.55:
+                    best_ckpt_path = "checkpoint_best.pt"
+                    torch.save({
+                        'iteration': iteration,
+                        'model_state_dict': model.state_dict(),
+                        'optimizer_state_dict': optimizer.state_dict(),
+                        'scaler_state_dict': scaler.state_dict(),
+                    }, best_ckpt_path)
+                    print(f"[{get_timestamp()}]           → NEW CHAMPION SAVED: {best_ckpt_path}")
+            elif not best_ckpt_path:
+                # First iteration saves as the initial best
+                best_ckpt_path = "checkpoint_best.pt"
+                torch.save({
+                    'iteration': iteration,
+                    'model_state_dict': model.state_dict(),
+                    'optimizer_state_dict': optimizer.state_dict(),
+                    'scaler_state_dict': scaler.state_dict(),
+                }, best_ckpt_path)
 
         scheduler.step()
 

@@ -138,7 +138,7 @@ After=network.target
 [Service]
 User=<VM_USER>
 WorkingDirectory=/home/<VM_USER>/mltrain
-ExecStart=/home/<VM_USER>/mltrain/.venv/bin/python app.py
+ExecStart=/home/<VM_USER>/mltrain/.venv/bin/gunicorn -w 1 -b 127.0.0.1:5000 app:app
 Restart=always
 
 [Install]

@@ -93,14 +93,14 @@ def load_model(checkpoint_path: str, device: torch.device):
     # Default path: PyTorch checkpoint
     model = AlphaNet().to(device)
     try:
-        checkpoint = torch.load(checkpoint_path, map_location=device)
+        checkpoint = torch.load(checkpoint_path, map_location=device, weights_only=True)
         if isinstance(checkpoint, dict) and 'model_state_dict' in checkpoint:
             model.load_state_dict(checkpoint['model_state_dict'])
         else:
             model.load_state_dict(checkpoint)
     except KeyError:
         # Fallback for raw state_dict checkpoints
-        model.load_state_dict(torch.load(checkpoint_path, map_location=device))
+        model.load_state_dict(torch.load(checkpoint_path, map_location=device, weights_only=True))
 
     model.eval()
     return model

@@ -120,12 +120,18 @@ async function handleColumnClick(c) {
     // Check if row 0 (top) is empty
     if (board[0][c] !== 0) return;
 
+    // Disable board immediately during processing
+    _board.classList.add('disabled');
+
     // PRE-MOVE: Save state for assessment
     const boardBefore = JSON.parse(JSON.stringify(board));
 
     // Play move visually and internally
     const r = getLowestEmptyRow(c);
-    if (r === -1) return;
+    if (r === -1) {
+        _board.classList.remove('disabled');
+        return;
+    }
 
     playMove(r, c, humanPlayer);
 

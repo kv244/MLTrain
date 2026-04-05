@@ -27,22 +27,34 @@ jobs:
       - name: Deploy Application Code
         run: |
           ssh ${{ secrets.GCP_VM_USER }}@${{ secrets.GCP_VM_HOST }} << 'EOF'
+            set -e
             cd ${{ env.TARGET_DIR }}
+
+            # Backup current venv for rollback
+            [ -d .venv ] && (rm -rf .venv.backup && cp -r .venv .venv.backup) || true
+
             git pull origin main
-            
-            # Setup virtual environment and deploy
+
             python3 -m venv .venv --system-site-packages 2>/dev/null || true
             .venv/bin/pip install -r requirements.txt
-            
-            # Restart the service to apply changes
+
             sudo systemctl restart ${{ env.SYSTEMD_SERVICE }}
           EOF
 
-      - name: Health check
+      - name: Health check with rollback
         run: |
-          ssh ${{ secrets.GCP_VM_USER }}@${{ secrets.GCP_VM_HOST }} \
-            "sleep 4 && systemctl is-active --quiet ${{ env.SYSTEMD_SERVICE }} \
-             && echo 'Service is running' || (journalctl -u ${{ env.SYSTEMD_SERVICE }} -n 20 --no-pager; exit 1)"
+          ssh ${{ secrets.GCP_VM_USER }}@${{ secrets.GCP_VM_HOST }} << 'EOF'
+            sleep 5
+            if ! systemctl is-active --quiet ${{ env.SYSTEMD_SERVICE }}; then
+              echo "Deploy failed — rolling back..."
+              journalctl -u ${{ env.SYSTEMD_SERVICE }} -n 30 --no-pager
+              [ -d .venv.backup ] && (rm -rf .venv && mv .venv.backup .venv) || true
+              sudo systemctl restart ${{ env.SYSTEMD_SERVICE }}
+              exit 1
+            fi
+            echo "Deploy successful."
+            rm -rf .venv.backup
+          EOF
 
       - name: Update ONNX Model Weight
         if: env.GCS_MODEL_URI != ''

@@ -40,6 +40,7 @@ def ratelimit_handler(e):
 
 MODELS_DIR = pathlib.Path(".").resolve()
 _csv_lock = threading.Lock()
+_model_lock = threading.Lock()
 
 def _resolve_checkpoint(name: str):
     """Return safe absolute path or None if invalid."""
@@ -103,12 +104,13 @@ class OpenVINOModel:
 
 def get_model(checkpoint_path):
     """Loads a compiled OpenVINO `.onnx` file or retrieves it from cache."""
-    if checkpoint_path not in LOADED_MODELS:
-        try:
-            model = OpenVINOModel(checkpoint_path)
-            LOADED_MODELS[checkpoint_path] = model
-        except Exception as e:
-            return None, str(e)
+    with _model_lock:
+        if checkpoint_path not in LOADED_MODELS:
+            try:
+                model = OpenVINOModel(checkpoint_path)
+                LOADED_MODELS[checkpoint_path] = model
+            except Exception as e:
+                return None, str(e)
     return LOADED_MODELS[checkpoint_path], None
 
 @app.route("/")

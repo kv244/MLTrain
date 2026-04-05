@@ -82,7 +82,7 @@ def main():
         print(f"Using PyTorch on device: {device}")
         model = AlphaNet().to(device)
         try:
-            checkpoint = torch.load(args.model, map_location=device)
+            checkpoint = torch.load(args.model, map_location=device, weights_only=True)
             model.load_state_dict(checkpoint['model_state_dict'])
         except FileNotFoundError:
             print(f"Error: Model file not found at '{args.model}'")
@@ -90,7 +90,7 @@ def main():
         except KeyError:
             # Fallback for raw state_dict checkpoints
             print("Warning: Checkpoint is not in the expected format. Trying to load raw state_dict.")
-            model.load_state_dict(torch.load(args.model, map_location=device))
+            model.load_state_dict(torch.load(args.model, map_location=device, weights_only=True))
 
     model.eval()
 

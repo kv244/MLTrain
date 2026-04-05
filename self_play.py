@@ -85,11 +85,24 @@ def run_batched_self_play(
     histories   = [[]               for _ in range(num_games)]
     move_counts = [0]               * num_games
     active      = list(range(num_games))   # indices of games still running
+    roots       = {i: None for i in range(num_games)} # Current MCTS root for each game
     all_data    = []
 
     while active:
-        # ── Pre-expand roots for all active games in one batch ────────────
-        roots = _expand_roots_batched(games, active, model, device)
+        # ── Expand/Update roots for all active games in one batch ────────────
+        # Only expand fresh roots for games that don't have a reusable subtree
+        to_expand = [i for i in active if roots[i] is None]
+        if to_expand:
+            new_roots = _expand_roots_batched(games, to_expand, model, device)
+            for i, node in new_roots.items():
+                roots[i] = node
+        
+        # For reused roots, just add Dirichlet noise to the existing root
+        # (Already has visits and evaluations from previous moves)
+        for i in active:
+            if i not in to_expand and roots[i] is not None:
+                if roots[i].children:
+                    _add_dirichlet_noise(roots[i])
 
         # ── num_sims-1 further simulations with batched leaf evaluation ───
         for _ in range(num_sims - 1):
@@ -145,11 +158,18 @@ def run_batched_self_play(
                 all_data.extend(_history_to_training_data(histories[i], winner))
                 newly_done.append(i)
             elif not games[i].get_valid_moves():
-                # Pass winner=0 explicitly — do NOT reference the `winner` variable
-                # here, as it may be unbound if this is the very first game and it
-                # ends in a draw before any win branch has executed.
+                # Pass winner=0 explicitly
                 all_data.extend(_history_to_training_data(histories[i], winner=0))
                 newly_done.append(i)
+            else:
+                # Reuse subtree for next move
+                chosen_child = roots[i].children.get(move)
+                if chosen_child and chosen_child.children:
+                    # Reuse subtree: detach from parent to prevent memory leak
+                    chosen_child.parent = None
+                    roots[i] = chosen_child
+                else:
+                    roots[i] = None # fresh expansion next iteration
 
         active = [i for i in active if i not in newly_done]
 
@@ -207,13 +227,25 @@ def _history_to_training_data(history, winner):
     """
     data = []
     for state_tensor, mcts_probs, player in history:
-        if winner == 0:
-            value = 0.0
-        else:
-            value = 1.0 if player == winner else -1.0
+        value = 0.0 if winner == 0 else (1.0 if player == winner else -1.0)
+        policy_tensor = torch.from_numpy(mcts_probs).float()
+
+        # Original
         data.append((
             state_tensor,
-            torch.from_numpy(mcts_probs).float(),
+            policy_tensor,
             torch.tensor([value], dtype=torch.float32),
         ))
+
+        # Horizontal mirror — flip spatial dim (W) of board, reverse policy columns
+        # state_tensor shape is (3, 6, 7), flip along dim 2 (width)
+        mirrored_state = torch.flip(state_tensor, dims=[2])
+        # policy_probs is a 1D tensor of 7 columns, flip it
+        mirrored_policy = torch.flip(policy_tensor, dims=[0])
+        data.append((
+            mirrored_state,
+            mirrored_policy,
+            torch.tensor([value], dtype=torch.float32),
+        ))
+
     return data

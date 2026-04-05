@@ -208,6 +208,11 @@ input[type=range] {
     color: var(--accent-color);
 }
 .hidden { display: none !important; }
+.disabled {
+    pointer-events: none;
+    cursor: not-allowed;
+    filter: brightness(0.8);
+}
 
 .board-container {
     display: flex;
