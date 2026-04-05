@@ -340,12 +340,13 @@ def health():
 
 # NEW: Dynamic Environment Background Refresh
 @app.route("/api/admin/refresh_background")
+@limiter.limit("2 per minute")
 def refresh_background():
     """Manually triggers a background update using Gemini + Vertex AI Imagen."""
     auth_token = request.args.get("auth")
     # For simplicity, we check an env-based secret
-    expected_token = os.environ.get("ADMIN_TOKEN", "admin123")
-    if auth_token != expected_token:
+    expected_token = os.environ.get("ADMIN_TOKEN")
+    if not expected_token or auth_token != expected_token:
         return jsonify({"error": "Unauthorized"}), 401
     
     success = background_manager.update_background()
@@ -385,6 +386,11 @@ if __name__ == "__main__":
     if background_manager.is_background_stale():
         print("[App] Stale background detected, triggering update...")
         # Run in a separate thread to avoid blocking startup
-        threading.Thread(target=background_manager.update_background).start()
+        def _safe_update():
+            try:
+                background_manager.update_background()
+            except Exception as e:
+                print(f"[App] Background update failed: {e}")
+        threading.Thread(target=_safe_update, daemon=True).start()
 
     app.run(debug=app_debug, host=app_host, port=app_port)
