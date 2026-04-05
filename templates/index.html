@@ -24,6 +24,12 @@
         <!-- Sidebar / Top controls -->
         <div class="control-panel">
             <div class="control-group">
+                <button id="btnToggleAudio" class="btn-icon">
+                    <span class="icon">♪</span> Soundtrack: OFF
+                </button>
+            </div>
+            
+            <div class="control-group">
                 <label for="modelSelect">Engine Version</label>
                 <select id="modelSelect" class="styled-select">
                     <option value="">Loading models...</option>
@@ -90,6 +96,7 @@
     </div>
 
     <!-- Scripts -->
+    <script src="{{ url_for('static', filename='audio-engine.js') }}"></script>
     <script src="{{ url_for('static', filename='win-effects.js') }}"></script>
     <script src="{{ url_for('static', filename='script.js') }}"></script>
 </body>

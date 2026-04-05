@@ -22,11 +22,20 @@ const _difficultySelect = document.getElementById('difficultySelect');
 const _badge = document.getElementById('turnBadge');
 const _boardArea = document.getElementById('boardArea');
 const _btnReset = document.getElementById('btnReset');
+const _btnAudio = document.getElementById('btnToggleAudio');
 
 // Init
 document.addEventListener("DOMContentLoaded", () => {
     updateStatsUI();
     loadModels();
+    
+    // Audio Toggle
+    if (_btnAudio) {
+        _btnAudio.addEventListener('click', () => {
+            const isPlaying = AudioEngine.toggle();
+            syncAudioUI(isPlaying);
+        });
+    }
     
     
 
@@ -108,6 +117,12 @@ function startGame(human_role) {
     _board.classList.remove('disabled');
     
     updateTurnUI();
+
+    // Start music if not already playing (User gesture context from click)
+    if (typeof AudioEngine !== 'undefined' && !AudioEngine.isPlaying) {
+        const isPlaying = AudioEngine.toggle();
+        syncAudioUI(isPlaying);
+    }
 
     // If AI is player 1, trigger AI move immediately
     if (humanPlayer !== currentPlayer) {
@@ -228,11 +243,27 @@ function showAssessment(data) {
     container.innerHTML = '';
     container.appendChild(badge);
     
+    // Audio Reactivity
+    if (typeof AudioEngine !== 'undefined' && AudioEngine.isPlaying) {
+        AudioEngine.setIntensity(data.score);
+    }
+
     // Highlight best move if it was a blunder (score <= 2)
     clearBestMoveHint();
     if (data.score <= 2) {
         const bestCol = document.querySelector(`.column[data-col="${data.best_move}"]`);
         if (bestCol) bestCol.classList.add('best-move-hint');
+    }
+}
+
+function syncAudioUI(isPlaying) {
+    if (!_btnAudio) return;
+    if (isPlaying) {
+        _btnAudio.classList.add('active');
+        _btnAudio.innerHTML = '<span class="icon">🔊</span> Soundtrack: ON';
+    } else {
+        _btnAudio.classList.remove('active');
+        _btnAudio.innerHTML = '<span class="icon">♪</span> Soundtrack: OFF';
     }
 }
 
