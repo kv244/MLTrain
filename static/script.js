@@ -320,7 +320,7 @@ function checkWinResult(r, c, player) {
     const directions = [[0, 1], [1, 0], [1, 1], [1, -1]];
     
     for (let [dr, dc] of directions) {
-        let count = 1;
+        let line = [[r, c]];
         for (let sign of [1, -1]) {
             let nr = r + dr * sign;
             let nc = c + dc * sign;
