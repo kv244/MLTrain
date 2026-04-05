@@ -136,7 +136,7 @@ async function handleColumnClick(c) {
     playMove(r, c, humanPlayer);
 
     // FETCH ASSESSMENT (Sequential to avoid server crash)
-    await fetchAssessment(boardBefore, c);
+    await fetchAssessment(boardBefore, c, humanPlayer); // FIX 13: pass current mover
 
     if (checkWinResult(r, c, humanPlayer)) {
         endGame("You Win!");
@@ -151,7 +151,10 @@ async function handleColumnClick(c) {
     triggerAiMove();
 }
 
-async function fetchAssessment(prevBoard, move) {
+async function fetchAssessment(prevBoard, move, movingPlayer) { // FIX 13: added param
+    const sims = parseInt(_difficultySelect.value, 10);
+    if (isNaN(sims) || sims < 1) return; // FIX 15: validate difficulty
+
     try {
         const res = await fetch('/api/assess', {
             method: 'POST',
@@ -160,8 +163,8 @@ async function fetchAssessment(prevBoard, move) {
                 model: _modelSelect.value,
                 board: prevBoard,
                 move: move,
-                current_player: humanPlayer,
-                simulations: parseInt(_difficultySelect.value)
+                current_player: movingPlayer, // FIX 13: use movingPlayer
+                simulations: sims // FIX 15: use validated sims
             })
         });
 
@@ -183,15 +186,27 @@ async function fetchAssessment(prevBoard, move) {
 function showAssessment(data) {
     console.log("Showing assessment UI:", data);
     const container = document.getElementById('assessmentContainer');
-    container.innerHTML = `
-        <div class="assessment-badge">
-            <div class="stars">
-                ${'★'.repeat(data.score).split('').map(s => `<span class="star-filled">${s}</span>`).join('')}
-                ${'☆'.repeat(5-data.score).split('').map(s => `<span class="star-empty">${s}</span>`).join('')}
-            </div>
-            <div class="comment-text">${data.comment}</div>
-        </div>
+    
+    // FIX 14: Use textContent for server-supplied strings
+    const badge = document.createElement('div');
+    badge.className = 'assessment-badge';
+    
+    const starsDiv = document.createElement('div');
+    starsDiv.className = 'stars';
+    starsDiv.innerHTML = `
+        ${'★'.repeat(data.score).split('').map(s => `<span class="star-filled">${s}</span>`).join('')}
+        ${'☆'.repeat(5-data.score).split('').map(s => `<span class="star-empty">${s}</span>`).join('')}
     `;
+    
+    const commentDiv = document.createElement('div');
+    commentDiv.className = 'comment-text';
+    commentDiv.textContent = data.comment; // FIX 14: safe text injection
+    
+    badge.appendChild(starsDiv);
+    badge.appendChild(commentDiv);
+    
+    container.innerHTML = '';
+    container.appendChild(badge);
     
     // Highlight best move if it was a blunder (score <= 2)
     clearBestMoveHint();
@@ -226,6 +241,9 @@ function playMove(r, c, player) {
 }
 
 async function triggerAiMove() {
+    const sims = parseInt(_difficultySelect.value, 10);
+    if (isNaN(sims) || sims < 1) return; // FIX 15: validate difficulty
+
     _board.classList.add('disabled');
     
     try {
@@ -233,7 +251,7 @@ async function triggerAiMove() {
             model: _modelSelect.value,
             board: board,
             current_player: currentPlayer,
-            simulations: parseInt(_difficultySelect.value)
+            simulations: sims // FIX 15: use validated sims
         };
 
         const res = await fetch('/api/move', {

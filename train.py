@@ -133,7 +133,7 @@ def train_step(states, target_p, target_v):
 
         log_probs   = F.log_softmax(policy_logits, dim=1)
         policy_loss = -torch.sum(target_p * log_probs, dim=1).mean()
-        value_loss  = F.mse_loss(value, target_v)
+        value_loss  = F.mse_loss(value.float(), target_v) # FIX 12
         loss        = policy_loss + value_loss
 
     scaler.scale(loss).backward()
@@ -156,6 +156,7 @@ def evaluate_model(current_model, best_model, device, n_games=EVAL_GAMES):
         game = Connect4()
         # Alternate who goes first
         current_player_at_start = 1 if i % 2 == 0 else -1
+        game.current_player = current_player_at_start # FIX 11
         
         while True:
             # Use 50 sims for fast evaluation

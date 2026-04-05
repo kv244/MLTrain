@@ -6,6 +6,7 @@ import torch
 import numpy as np
 import pathlib
 import threading
+from collections import OrderedDict # FIX 6
 from flask import Flask, request, jsonify, render_template
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
@@ -19,9 +20,12 @@ VERSION = "1.0.2"
 LAST_COMMIT = "2026-04-04 08:32 UTC"
 
 from mcts import Connect4, run_mcts_simulations
+import background_manager # NEW: Dynamic Environment manager
 
 app = Flask(__name__)
-# Tell Flask to trust X-Forwarded-For headers from Nginx
+app.config['MAX_CONTENT_LENGTH'] = 64 * 1024  # FIX 8: 64 KB limit
+# x_for=1: trust exactly 1 proxy hop (nginx).
+# Only works correctly because nginx strips client X-Forwarded-For above.
 app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1, x_prefix=1)
 
 RATE_LIMITS = os.environ.get("RATE_LIMIT", "500 per day;200 per hour;15 per minute").split(";")
@@ -55,7 +59,8 @@ def _resolve_checkpoint(name: str):
 
 # Cache models to avoid reloading them constantly
 # This is a small optimization for web responsiveness.
-LOADED_MODELS = {}
+MAX_LOADED_MODELS = 3 # FIX 6: LRU cap
+LOADED_MODELS = OrderedDict() # FIX 6
 device = torch.device("cpu") # PyTorch tensor device for CPU memory handling
 
 def get_ov_device():
@@ -70,6 +75,7 @@ GLOBAL_OV_DEVICE = get_ov_device()
 class OpenVINOModel:
     """A wrapper to make an OpenVINO model behave like a PyTorch model for inference."""
     def __init__(self, model_path: str, device: str = "AUTO"):
+        self._lock = threading.Lock() # FIX 5: OpenVINO thread safety
         core = ov.Core()
         
         # Check available devices to prioritize NPU
@@ -95,7 +101,8 @@ class OpenVINOModel:
 
     def __call__(self, x: torch.Tensor):
         x_np = x.cpu().numpy()
-        result = self.compiled_model([x_np])
+        with self._lock: # FIX 5: OpenVINO thread safety
+            result = self.compiled_model([x_np])
         return torch.from_numpy(result[self.policy_output]), \
                torch.from_numpy(result[self.value_output])
 
@@ -109,8 +116,14 @@ def get_model(checkpoint_path):
             try:
                 model = OpenVINOModel(checkpoint_path)
                 LOADED_MODELS[checkpoint_path] = model
+                # FIX 6: Evict oldest if cap reached
+                if len(LOADED_MODELS) > MAX_LOADED_MODELS:
+                    LOADED_MODELS.popitem(last=False)
             except Exception as e:
                 return None, str(e)
+        else:
+            # Move to end for LRU behavior
+            LOADED_MODELS.move_to_end(checkpoint_path)
     return LOADED_MODELS[checkpoint_path], None
 
 @app.route("/")
@@ -126,6 +139,7 @@ def get_info():
 def log_game_end():
     """Receives and logs game outcome telemtry."""
     data = request.json
+    if not data: return jsonify({"error": "Missing or invalid JSON"}), 400 # FIX 1
     winner = data.get("winner", "unknown")
     model_version = data.get("model", "unknown")
     
@@ -154,10 +168,21 @@ def list_models():
 def get_move():
     """Calculates the best move using the model + MCTS search."""
     data = request.json
+    if not data: return jsonify({"error": "Missing or invalid JSON"}), 400 # FIX 1
+
     checkpoint_name = data.get("model", "")
     board_state = data.get("board", []) 
     current_player = data.get("current_player", -1) 
-    simulations = max(1, min(int(data.get("simulations", 400)), 2048))
+
+    # FIX 4: Validate current_player
+    if current_player not in (-1, 1):
+        return jsonify({"error": "Invalid current_player"}), 400
+
+    # FIX 3: safe int coercion
+    try:
+        simulations = max(1, min(int(data.get("simulations", 400)), 2048))
+    except (TypeError, ValueError):
+        return jsonify({"error": "Invalid simulations value"}), 400
     
     checkpoint = _resolve_checkpoint(checkpoint_name)
     if not checkpoint:
@@ -168,9 +193,15 @@ def get_move():
     if board_arr.shape != (6, 7) or not np.all(np.isin(board_arr, [-1, 0, 1])):
         return jsonify({"error": "Invalid board state"}), 400
 
+    # FIX 7: board piece-count validation
+    count_p1 = int(np.sum(board_arr == 1))
+    count_p2 = int(np.sum(board_arr == -1))
+    if abs(count_p1 - count_p2) > 1:
+        return jsonify({"error": "Invalid board state: inconsistent piece counts"}), 400
+
     model, error = get_model(str(checkpoint))
     if error:
-        return jsonify({"error": f"Failed to load model: {error}"}), 500
+        return jsonify({"error": f"Failed to load model: {error}"}), 503
 
     # Reconstruct the game state for the Python engine
     game = Connect4()
@@ -213,11 +244,27 @@ def get_move():
 def assess_move():
     """Evaluates a specific move against the AI's best recommended move."""
     data = request.json
+    if not data: return jsonify({"error": "Missing or invalid JSON"}), 400 # FIX 1
+
     checkpoint_name = data.get("model", "")
     board_state = data.get("board", []) # This should be the board BEFORE the move
     move = data.get("move", -1)
+    
+    # FIX 2: validate move param
+    if not isinstance(move, int) or move < 0 or move >= 7:
+        return jsonify({"error": "Invalid move"}), 400
+
     current_player = data.get("current_player", 1)
-    simulations = max(1, min(int(data.get("simulations", 400)), 2048))
+
+    # FIX 4: Validate current_player
+    if current_player not in (-1, 1):
+        return jsonify({"error": "Invalid current_player"}), 400
+
+    # FIX 3: safe int coercion
+    try:
+        simulations = max(1, min(int(data.get("simulations", 400)), 2048))
+    except (TypeError, ValueError):
+        return jsonify({"error": "Invalid simulations value"}), 400
 
     checkpoint = _resolve_checkpoint(checkpoint_name)
     if not checkpoint:
@@ -230,7 +277,7 @@ def assess_move():
 
     model, error = get_model(str(checkpoint))
     if error:
-        return jsonify({"error": f"Failed to load model: {error}"}), 500
+        return jsonify({"error": f"Failed to load model: {error}"}), 503
 
     game = Connect4()
     game.board = board_arr
@@ -272,9 +319,33 @@ def assess_move():
         "probs": [float(p) for p in mcts_probs]
     })
 
-@app.route("/health")
 def health():
     return jsonify({"status": "ok"}), 200
+
+# NEW: Dynamic Environment Background Refresh
+@app.route("/api/admin/refresh_background")
+def refresh_background():
+    """Manually triggers a background update using Gemini + Vertex AI Imagen."""
+    auth_token = request.args.get("auth")
+    # For simplicity, we check an env-based secret
+    expected_token = os.environ.get("ADMIN_TOKEN", "admin123")
+    if auth_token != expected_token:
+        return jsonify({"error": "Unauthorized"}), 401
+    
+    success = background_manager.update_background()
+    if success:
+        return jsonify({"status": "Success", "message": "Background updated"}), 200
+    else:
+        return jsonify({"status": "Error", "message": "Failed to update background"}), 505
+
+# FIX 9: security response headers
+@app.after_request
+def set_security_headers(response):
+    response.headers['Content-Security-Policy'] = "default-src 'self'; font-src https://fonts.googleapis.com https://fonts.gstatic.com; style-src 'self' https://fonts.googleapis.com; script-src 'self'"
+    response.headers['X-Content-Type-Options'] = 'nosniff'
+    response.headers['X-Frame-Options'] = 'DENY'
+    response.headers['Referrer-Policy'] = 'strict-origin-when-cross-origin'
+    return response
 
 if __name__ == "__main__":
     # Create templates and static directories if they don't exist
@@ -293,5 +364,11 @@ if __name__ == "__main__":
     if initial_models:
         print(f"Pre-loading latest checkpoint for optimization: {initial_models[0]}")
         get_model(initial_models[0])
+
+    # Dynamic Environment: Startup check for stale background
+    if background_manager.is_background_stale():
+        print("[App] Stale background detected, triggering update...")
+        # Run in a separate thread to avoid blocking startup
+        threading.Thread(target=background_manager.update_background).start()
 
     app.run(debug=app_debug, host=app_host, port=app_port)

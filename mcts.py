@@ -205,10 +205,11 @@ def run_mcts_simulations(
         policy_logits, value = model(state)
     policy_probs = F.softmax(policy_logits, dim=1).squeeze().cpu().numpy()
     root.expand(policy_probs)
-    root.backpropagate(value.item())
-
-    if add_dirichlet_noise and root.children:
+    
+    if add_dirichlet_noise and root.children: # FIX 16: Move before backprop
         _add_dirichlet_noise(root)
+
+    root.backpropagate(value.item())
 
     # ── num_sims - 1 further simulations (root eval counted as one) ───────
     for _ in range(num_sims - 1):

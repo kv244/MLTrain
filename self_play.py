@@ -132,7 +132,7 @@ def run_batched_self_play(
 
                 for j, (i, node) in enumerate(to_evaluate):
                     node.expand(leaf_probs[j])
-                    node.backpropagate(values[j].item())
+                    node.backpropagate(values[j].float().item()) # FIX 12
 
         # ── Pick moves for every active game ──────────────────────────────
         newly_done = []
@@ -197,7 +197,7 @@ def _expand_roots_batched(games, active, model, device):
     for j, i in enumerate(active):
         root = MCTSNode(games[i].clone())
         root.expand(policy_probs[j])
-        root.backpropagate(values[j].item())
+        root.backpropagate(values[j].float().item()) # FIX 12
         if root.children:
             _add_dirichlet_noise(root)
         roots[i] = root

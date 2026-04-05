@@ -8,3 +8,5 @@ openvino
 flake8
 networkx
 python-dotenv
+google-generativeai
+google-cloud-aiplatform

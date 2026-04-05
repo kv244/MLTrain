@@ -42,7 +42,7 @@ def main():
             'policy': {0: 'batch_size'},
             'value': {0: 'batch_size'}
         },
-        opset_version=11
+        opset_version=17 # FIX 17: upgrade to opset 17
     )
     print("Export complete.")
 
