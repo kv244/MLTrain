@@ -431,6 +431,13 @@ function endGame(message, winningLine = null) {
     // Trigger randomized win effect if there is a winner
     if (winnerId !== "draw" && winningLine) {
         WinEffects.triggerRandom(winnerId, winningLine);
+        
+        // LOCK UI: DELAY reset button for 1.5s to show off the finisher
+        setTimeout(() => {
+            _btnReset.classList.remove('hidden');
+        }, 1500);
+    } else {
+        _btnReset.classList.remove('hidden');
     }
 
     if (winnerId !== "draw" || message.includes("Draw")) {
@@ -448,6 +455,4 @@ function endGame(message, winningLine = null) {
             })
         }).catch(e => console.error("Telemetry log failed:", e));
     }
-    
-    _btnReset.classList.remove('hidden');
 }

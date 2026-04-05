@@ -166,5 +166,25 @@ const AudioEngine = {
         // Open the filter for higher scores
         const freq = 400 + (score * 400);
         this.prophetFilter.frequency.setTargetAtTime(freq, this.ctx.currentTime, 0.5);
+    },
+
+    // Win effects: Glitch / Pitch-Slide
+    glitchWin() {
+        if (!this.ctx || !this.isPlaying) return;
+        // Tempo drift
+        const originalBpm = this.bpm;
+        this.bpm = 300; 
+        setTimeout(() => {
+            this.bpm = 75;
+            setTimeout(() => this.bpm = originalBpm, 500);
+        }, 100);
+    },
+
+    pitchSlideWin() {
+        if (!this.ctx || !this.prophet) return;
+        const now = this.ctx.currentTime;
+        this.prophet.osc1.frequency.exponentialRampToValueAtTime(10, now + 1.5);
+        this.prophet.osc2.frequency.exponentialRampToValueAtTime(10, now + 1.5);
+        this.prophet.gain.gain.exponentialRampToValueAtTime(0.0001, now + 1.5);
     }
 };
