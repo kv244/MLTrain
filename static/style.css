@@ -18,6 +18,7 @@
     --player-2: #ffe700; /* Electric Yellow/Gold */
     --spot-empty: #0a0a1a;
     --grid-line: rgba(0, 229, 255, 0.1);
+    --ui-glow: var(--neon-cyan);
 }
 
 * {
@@ -58,11 +59,18 @@ body::after {
     width: 100%;
     max-width: 800px;
     background: var(--panel-bg);
-    border: 1px solid var(--border-color);
-    border-radius: 16px;
+    backdrop-filter: blur(12px);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 20px;
     padding: 2rem;
-    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
-    backdrop-filter: blur(10px);
+    box-shadow: 0 0 20px var(--ui-glow), inset 0 0 10px var(--ui-glow);
+    transition: box-shadow 0.8s ease;
+    animation: ambient-pulse 5s infinite alternate ease-in-out;
+}
+
+@keyframes ambient-pulse {
+    from { box-shadow: 0 0 15px var(--ui-glow), inset 0 0 8px var(--ui-glow); }
+    to { box-shadow: 0 0 35px var(--ui-glow), inset 0 0 15px var(--ui-glow); }
 }
 
 .game-header {
@@ -405,7 +413,35 @@ input[type=range] {
     font-size: 1.2rem;
 }
 
-.star-filled { color: #f1c40f; }
+.ai-quote {
+    font-style: italic;
+    font-size: 0.85rem;
+    color: var(--primary-color);
+    margin-top: 0.5rem;
+    opacity: 0.8;
+    border-left: 2px solid var(--primary-color);
+    padding-left: 0.75rem;
+    animation: quote-fade 0.5s ease-out forwards;
+}
+
+@keyframes quote-fade {
+    from { opacity: 0; transform: translateX(-10px); }
+    to { opacity: 0.8; transform: translateX(0); }
+}
+
+.star-filled {
+    color: var(--neon-lime);
+    text-shadow: 0 0 5px var(--neon-lime);
+    display: inline-block;
+    animation: star-pop 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
+    opacity: 0;
+    transform: scale(0);
+}
+
+@keyframes star-pop {
+    to { opacity: 1; transform: scale(1); }
+}
+
 .star-empty { color: rgba(255, 255, 255, 0.2); }
 
 .comment-text {

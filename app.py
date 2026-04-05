@@ -96,15 +96,19 @@ class OpenVINOModel:
             device_name=device,
             config={"PERFORMANCE_HINT": "LATENCY"}
         )
+        self.infer_request = self.compiled_model.create_infer_request()
         self.policy_output = self.compiled_model.output("policy")
         self.value_output = self.compiled_model.output("value")
 
     def __call__(self, x: torch.Tensor):
         x_np = x.cpu().numpy()
         with self._lock: # FIX 5: OpenVINO thread safety
-            result = self.compiled_model([x_np])
-        return torch.from_numpy(result[self.policy_output]), \
-               torch.from_numpy(result[self.value_output])
+            # Switch to asynchronous pattern for future concurrency
+            self.infer_request.start_async(inputs={0: x_np})
+            self.infer_request.wait()
+            policy = self.infer_request.get_output_tensor(0).data
+            value = self.infer_request.get_output_tensor(1).data
+        return torch.from_numpy(policy), torch.from_numpy(value)
 
     def eval(self):
         pass
@@ -240,6 +244,14 @@ def get_move():
         "inference_time_ms": inference_time * 1000
     })
 
+PERSONALITY_QUOTES = {
+    1: ["Biological error in judgment. Logical flow disrupted.", "Critical processing error in your tactical layer.", "Fascinating... Your tactical decay is accelerating."],
+    2: ["Suboptimal. Analysis reveals several more efficient paths.", "Inaccurate. Your neural patterns are predictable.", "Efficiency decreased. Recalibrating threat level."],
+    3: ["Standard tactical execution. Proceeding.", "Solid. A move consistent with baseline probability.", "Within acceptable parameters."],
+    4: ["A strong maneuver. Your synergy with the grid is improving.", "Impressive. You are calculating faster than my previous opponent.", "Great move. The simulation responds well to your input."],
+    5: ["Brilliant! My sub-processors didn't catch that until too late.", "Remarkable. That move is statistically perfect.", "You are... more than a simple biological player. Fascinating."]
+}
+
 @app.route("/api/assess", methods=["POST"])
 def assess_move():
     """Evaluates a specific move against the AI's best recommended move."""
@@ -312,9 +324,13 @@ def assess_move():
     else:
         score, comment = 1, "Blunder!"
 
+    import random
+    quote = random.choice(PERSONALITY_QUOTES.get(score, ["Analysis complete."]))
+
     return jsonify({
         "score": score,
         "comment": comment,
+        "ai_quote": quote,
         "best_move": int(np.argmax(mcts_probs)),
         "probs": [float(p) for p in mcts_probs]
     })

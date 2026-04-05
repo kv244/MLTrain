@@ -195,17 +195,35 @@ function showAssessment(data) {
     
     const starsDiv = document.createElement('div');
     starsDiv.className = 'stars';
-    starsDiv.innerHTML = `
-        ${'★'.repeat(data.score).split('').map(s => `<span class="star-filled">${s}</span>`).join('')}
-        ${'☆'.repeat(5-data.score).split('').map(s => `<span class="star-empty">${s}</span>`).join('')}
-    `;
+    
+    // Sequential star pop-in
+    for (let i = 0; i < data.score; i++) {
+        const s = document.createElement('span');
+        s.className = 'star-filled';
+        s.textContent = '★';
+        s.style.animationDelay = `${i * 0.15}s`;
+        starsDiv.appendChild(s);
+    }
+    for (let i = 0; i < (5 - data.score); i++) {
+        const s = document.createElement('span');
+        s.className = 'star-empty';
+        s.textContent = '☆';
+        starsDiv.appendChild(s);
+    }
     
     const commentDiv = document.createElement('div');
     commentDiv.className = 'comment-text';
-    commentDiv.textContent = data.comment; // FIX 14: safe text injection
+    commentDiv.textContent = data.comment; 
     
     badge.appendChild(starsDiv);
     badge.appendChild(commentDiv);
+    
+    if (data.ai_quote) {
+        const quoteDiv = document.createElement('div');
+        quoteDiv.className = 'ai-quote';
+        quoteDiv.textContent = data.ai_quote;
+        badge.appendChild(quoteDiv);
+    }
     
     container.innerHTML = '';
     container.appendChild(badge);
@@ -350,9 +368,11 @@ function updateTurnUI() {
     if (currentPlayer === humanPlayer) {
         _badge.innerText = "Your Turn";
         _badge.className = "player-turn-badge turn-p1";
+        document.documentElement.style.setProperty('--ui-glow', 'var(--neon-magenta)');
     } else {
         _badge.innerText = "AI is thinking...";
         _badge.className = "player-turn-badge turn-ai";
+        document.documentElement.style.setProperty('--ui-glow', 'var(--neon-cyan)');
     }
 }
 
