@@ -35,7 +35,7 @@ NUM_SIMS             = 400       # Higher-quality trees for stronger models
 REPLAY_BUFFER_SIZE   = 50_000
 LEARNING_RATE        = 1e-3
 WEIGHT_DECAY         = 1e-4
-TOTAL_ITERATIONS     = 1001
+TOTAL_ITERATIONS     = 1500
 CHECKPOINT_EVERY     = 10
 EVAL_GAMES           = 100       # Reduced variance in champion gating
 EVAL_EVERY           = 20
@@ -68,13 +68,17 @@ if pretrained_checkpoints:
     if 'iteration' in ckpt_data:
         start_iteration = ckpt_data['iteration'] + 1
 
+    # Reset LR — the saved LR of 1e-5 is too low to continue learning effectively
+    for param_group in optimizer.param_groups:
+        param_group['lr'] = 1e-4
+
 best_ckpt_path = pretrained_checkpoints[-1] if pretrained_checkpoints else None
 import numpy as np
 
 # LR schedule: drop by 10× at iteration 100, again at 150.
 # Keeps updates aggressive early, then stabilises loss in late training.
 scheduler = torch.optim.lr_scheduler.MultiStepLR(
-    optimizer, milestones=[100, 150], gamma=0.1
+    optimizer, milestones=[700, 1000], gamma=0.1
 )
 
 import sys

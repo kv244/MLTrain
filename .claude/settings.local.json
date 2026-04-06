@@ -18,7 +18,10 @@
       "Read(//c/Users/julia/**)",
       "Bash(python -c ':*)",
       "Bash(wc:*)",
-      "Bash(ls:*)"
+      "Bash(ls:*)",
+      "Bash(python visualize.py --checkpoint checkpoint_0410.pt --show-board --show-divergence --show-trajectory --show-saliency --output-dir viz_out)",
+      "Bash(mkdir -p viz_out)",
+      "Bash(PYTHONIOENCODING=utf-8 python visualize.py --checkpoint checkpoint_0410.pt --show-board --show-divergence --show-trajectory --show-saliency --output-dir viz_out)"
     ]
   }
 }
