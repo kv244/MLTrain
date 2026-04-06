@@ -46,6 +46,12 @@ python train.py
 ```
 The script will automatically detect and use your CUDA-enabled GPU.
 
+### 🧠 Training & Memory Management
+
+The training loop is optimized for efficiency on high-end consumer GPUs:
+- **VRAM Recovery**: After every champion evaluation, the script explicitly deletes the evaluation model and clears the CUDA cache via `torch.cuda.empty_cache()`. This prevents OOM (Out of Memory) errors during long-running training sessions.
+- **Batched MCTS**: Self-play is performed in parallel batches to maximize Tensor Core utilization.
+
 ### What to Expect
 
 You will see output indicating the training progress for each iteration:
@@ -155,45 +161,10 @@ sudo systemctl start connect4
 
 ### Step 3: GitHub Actions workflow
 
-In your Flask web app repo, create `.github/workflows/deploy.yml`:
+In your Flask web app repo, use the `.github/workflows/deploy.yml` provided in the codebase.
 
-```yaml
-name: Deploy to GCP VM
-
-on:
-  push:
-    branches: [main]
-
-jobs:
-  deploy:
-    runs-on: ubuntu-latest
-
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Set up SSH
-        uses: webfactory/ssh-agent@v0.9.0
-        with:
-          ssh-private-key: ${{ secrets.GCP_SSH_PRIVATE_KEY }}
-
-      - name: Add VM to known hosts
-        run: ssh-keyscan -H ${{ secrets.GCP_VM_HOST }} >> ~/.ssh/known_hosts
-
-      - name: Deploy
-        run: |
-          ssh ${{ secrets.GCP_VM_USER }}@${{ secrets.GCP_VM_HOST }} << 'EOF'
-            cd ~/mltrain
-            git pull origin main
-            python3 -m venv .venv --system-site-packages 2>/dev/null || true
-            .venv/bin/pip install -r requirements.txt
-            sudo systemctl restart connect4
-          EOF
-
-      - name: Update model (if changed)
-        run: |
-          ssh ${{ secrets.GCP_VM_USER }}@${{ secrets.GCP_VM_HOST }} \
-            "gsutil cp gs://<YOUR_BUCKET>/model.onnx ~/mltrain/model.onnx"
-```
+**Key Hardening**:
+- **SSH Fingerprints**: The workflow uses hardcoded fingerprints for the production VM (`34.124.246.40`) to ensure stable CI/CD connections and prevent MITM verification flakes.
 
 ### GitHub Secrets
 
@@ -302,7 +273,9 @@ This limits each IP to 5 requests/minute (burst of 10). Update the GCP firewall 
 
 #### Layer 2: flask-limiter (in the Flask app)
 
-Add `flask-limiter` to your Flask app as a backstop:
+Add `flask-limiter` to your Flask app as a backstop. 
+
+> **Important (Production):** If using multi-worker Gunicorn, `memory://` storage will not sync limits across workers. You **must** use a Redis URL (e.g., `redis://localhost:6379`) in your `LIMITER_STORAGE_URI` environment variable for consistent rate limiting.
 
 ```python
 from flask_limiter import Limiter
@@ -330,3 +303,33 @@ Set a threshold (e.g. $20/month) — GCP will email you before you're surprised.
 - [ ] **SQLite Integration:** Implement a robust database for game results and telemetry to replace the current CSV system.
 - [x] **Dynamic Environment:** Successfully implemented via `background_manager.py`. The system automatically generates and rotates high-fidelity cyberpunk backgrounds using the Gemini API and Vertex AI Imagen once a week, keeping the UI fresh and modern.
 - [x] **Root Cause Analysis (RCA):** Completed detailed analysis of the April 2026 deployment outages.
+
+## Version History
+
+### [v1.4.0] - 2026-04-06
+- **Deployment Self-Backup**: Added an automatic `tar` archive step to the GCP deployment harness (`deploy.yml`) to capture the "live" state before pulling new code.
+- **Archive Rotation**: Implemented a retention policy to keep only the 5 most recent source-code backups on the VM, preventing storage bloat.
+- **Expert-Tier Diagnostics**: Integrated `visualize.py` and `eval_models.py` into the testing workflow to verify Checkpoint 410's stabilized value trajectory and sharpened board focus.
+
+### [v1.3.1] - 2026-04-06
+- **Runtime Strength Boost**: Raised inference simulation depth to **800** (Medium) and **2000** (Hard).
+- **Dynamic Simulation Cap**: Increased server-side hard cap from 2048 to **5000** (NPU-optimized) to allow deeper search in high-complexity positions.
+- **Improved Engine Defaults**: Standardized **800** simulations across CLI tools (`play.py`, `mcts.py`).
+
+### [v1.3.0] - 2026-04-05
+- **AlphaZero Tuning**: Scaled training parallelization to **128 parallel games** and **400 sims** per self-play move.
+- **Tuned Exploration**: Reduced `c_puct` from 1.5 to **1.0** for sharper tactical exploitation and set `temp_threshold` to **12** for more competitive endgame data.
+- **Balanced Opening Curriculum**: Pre-seeded self-play games with **2–4 random moves** for diverse state coverage.
+- **Robust Champion Gating**: Increased model evaluation threshold to **100 games** at a 55% win-rate for promotion.
+
+### [v1.2.0] - 2023-04-05
+- **GCP Environment Upgrades**: Implemented **Vertex AI Imagen** integration in `background_manager.py` with atomic `.tmp` → `rename` file saving.
+- **Environment Parity**: Added comprehensive security and configuration documentation to `.env.example`.
+
+### [v1.1.0] - 2026-04-05
+- **Interactive UI Overhaul**: Added **win-cell highlighting**, **move history** (2-move undo), and **hints**.
+- **Engine Visuals**: Implemented real-time **MCTS Probability Heatmap** and **Adaptive Simulation Budget** (dynamic sims).
+- **Multi-Level Difficulty**: Integrated a custom difficulty selector into the frontend.
+
+### [v1.0.0] - 2026-04-04
+- **Initial Release**: Core AlphaZero Connect 4 training loop with RTX 4070 optimizations.

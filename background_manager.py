@@ -4,17 +4,16 @@ import datetime
 import pathlib
 import threading
 import google.generativeai as genai
-from google.cloud import aiplatform
-from google.cloud.aiplatform.gapic.schema import predict
+import vertexai
+from vertexai.vision_models import ImageGenerationModel
 from dotenv import load_dotenv
-from PIL import Image
 
 load_dotenv()
 
 # Configuration
 BG_PATH = pathlib.Path("static/cyberpunk_bg.png").resolve()
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
-PROJECT_ID = os.environ.get("GCP_PROJECT_ID", "gen-lang-client-0269785868") # Actual project ID
+PROJECT_ID = os.environ.get("GCP_PROJECT_ID")
 LOCATION = "us-central1"
 
 def is_background_stale(days=7):
@@ -28,12 +27,17 @@ def is_background_stale(days=7):
 
 def update_background():
     """Generates a new background using Gemini + Vertex AI Imagen."""
+    if not PROJECT_ID:
+        print("[BackgroundManager] Error: GCP_PROJECT_ID not set")
+        return False
+
     if not GEMINI_API_KEY:
         print("[BackgroundManager] Error: GEMINI_API_KEY not found in .env")
         return False
 
     print("[BackgroundManager] Starting background renewal...")
     
+    tmp_path = None
     try:
         # 1. Generate a vivid prompt via Gemini
         genai.configure(api_key=GEMINI_API_KEY)
@@ -51,32 +55,16 @@ def update_background():
         print(f"[BackgroundManager] Gemini prompt: {image_prompt}")
 
         # 2. Generate Image via Vertex AI Imagen
-        # Note: This requires the GCP SDK to be authenticated and the Vertex AI API enabled.
-        # If the user is on the VM, gsutil/gcloud will handle auth.
-        aiplatform.init(project=PROJECT_ID, location=LOCATION)
+        vertexai.init(project=PROJECT_ID, location=LOCATION)
+        generation_model = ImageGenerationModel.from_pretrained("imagegeneration@006")
         
-        # Placeholder for Vertex AI Imagen 2 implementation
-        # In a real production stack with a service account, we would call the Imagen API here.
-        # For this demonstration, we'll assume the environment is set up.
-        from google.cloud import aiplatform_v1
-        
-        # Note: In most use-cases with a personal API key from AI Studio, 
-        # direct Vertex AI SDK access requires more complex auth (Service Account).
-        # If the key is just for AI Studio, this call might fail without ADC.
         print("[BackgroundManager] Requesting image from Vertex AI Imagen...")
+        images = generation_model.generate_images(prompt=image_prompt, number_of_images=1)
         
-        # We simulate the image generation here for the walkthrough, but provide the real code structure.
-        # Real code for production:
-        """
-        client = aiplatform.gapic.PredictionServiceClient(client_options={"api_endpoint": f"{LOCATION}-aiplatform.googleapis.com"})
-        instance = predict.instance.ImageGenerationPredictionInstance(prompt=image_prompt).to_value()
-        instances = [instance]
-        parameters = predict.params.ImageGenerationPredictionParams(sample_count=1).to_value()
-        
-        response = client.predict(endpoint=f"projects/{PROJECT_ID}/locations/{LOCATION}/publishers/google/models/imagegeneration@006", 
-                                  instances=instances, parameters=parameters)
-        # Process and save the first resulting image
-        """
+        # 3. Save the image atomically
+        tmp_path = BG_PATH.with_suffix(".tmp")
+        images[0].save(str(tmp_path))
+        tmp_path.rename(BG_PATH)
         
         print("[BackgroundManager] Background updated successfully.")
         return True
@@ -84,6 +72,12 @@ def update_background():
     except Exception as e:
         print(f"[BackgroundManager] Error during background update: {e}")
         return False
+    finally:
+        if tmp_path and tmp_path.exists():
+            try:
+                tmp_path.unlink()
+            except Exception as e:
+                print(f"[BackgroundManager] Failed to clean up .tmp file: {e}")
 
 if __name__ == "__main__":
     # If run directly, force an update

@@ -28,16 +28,16 @@ from self_play import run_batched_self_play, _history_to_training_data
 from mcts import run_mcts_simulations, Connect4
 
 # ── Hyper-parameters ──────────────────────────────────────────────────────────
-PARALLEL_GAMES       = 64        # games played simultaneously per self-play phase
+PARALLEL_GAMES       = 128       # games played simultaneously per self-play phase
 TRAIN_STEPS_PER_ITER = 10        # gradient updates per iteration
 BATCH_SIZE           = 512
-NUM_SIMS             = 200       # MCTS simulations per move (400 → stronger, slower)
+NUM_SIMS             = 400       # Higher-quality trees for stronger models
 REPLAY_BUFFER_SIZE   = 50_000
 LEARNING_RATE        = 1e-3
 WEIGHT_DECAY         = 1e-4
-TOTAL_ITERATIONS     = 301
+TOTAL_ITERATIONS     = 1001
 CHECKPOINT_EVERY     = 10
-EVAL_GAMES           = 20
+EVAL_GAMES           = 100       # Reduced variance in champion gating
 EVAL_EVERY           = 20
 
 # ── Device & model ────────────────────────────────────────────────────────────
@@ -260,6 +260,9 @@ if __name__ == "__main__":
                         'scaler_state_dict': scaler.state_dict(),
                     }, best_ckpt_path)
                     print(f"[{get_timestamp()}]           → NEW CHAMPION SAVED: {best_ckpt_path}")
+                del eval_model
+                if device.type == "cuda":
+                    torch.cuda.empty_cache()
             elif not best_ckpt_path:
                 # First iteration saves as the initial best
                 best_ckpt_path = "checkpoint_best.pt"

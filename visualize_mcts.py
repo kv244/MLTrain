@@ -31,7 +31,7 @@ from mcts import Connect4, MCTSNode, board_to_tensor, run_mcts_simulations
 def load_model(checkpoint_path: str, device: torch.device):
     path = Path(checkpoint_path)
     model = AlphaNet().to(device)
-    checkpoint = torch.load(str(path), map_location=device)
+    checkpoint = torch.load(str(path), map_location=device, weights_only=True)
     if isinstance(checkpoint, dict) and "model_state_dict" in checkpoint:
         model.load_state_dict(checkpoint["model_state_dict"])
     else:

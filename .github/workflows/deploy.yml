@@ -22,15 +22,34 @@ jobs:
           ssh-private-key: ${{ secrets.GCP_SSH_PRIVATE_KEY }}
 
       - name: Add VM to known hosts
-        run: ssh-keyscan -H ${{ secrets.GCP_VM_HOST }} >> ~/.ssh/known_hosts
+        # Host keys verified manually from 34.124.246.40 on 2026-04-05.
+        # Re-run ssh-keyscan -H 34.124.246.40 and update if the VM is rebuilt.
+        run: |
+          mkdir -p ~/.ssh
+          cat >> ~/.ssh/known_hosts << 'KNOWN_HOSTS'
+          |1|+qWp9OuG7vFKASS8We9gdaT/a5g=|JE0pYdbQs9YCS1PiNxN46YaQy50= ecdsa-sha2-nistp256 AAAAE2VjZHNhLXNoYTItbmlzdHAyNTYAAAAIbmlzdHAyNTYAAABBBD1yaSFAUca7yM1Bl2Wet9qxuOdcX986sounqPk0JqjtygpnoPZIgohcSEEAOhrMaT2Ld3yEhd5hJCYxW+Obads=
+          |1|j/pB4qYqYoauLQ6aD21IudoKVdQ=|5sVXWa/E/bJo7/+eiJ1kBT1Vm4w= ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABgQC4zi06L8lUOhH2PIhBtsH7fM749IRADnEvFmC+ccWrYti3sDwoci6T+9Ol0va0t9+i4RKCD+MY2XnQiXL1qQcBwskIdSwfiLB4Ebd4q3jbbUjFk3L5MsaUo9yNza9ki0T8akQg70RHLmb7PumN59y3NCUJbNBD35zsnkZyzYL5cuHEI6PEd/43S1NMUkOF7QNqYWVWLO0SP2a8Mx6U9bOKtj+bDto6DqfSH9hyGWb7DnnL1tu/79oG4/oKFPh9vNJI6xFl3mmQrrYsCPRwjvIAmmOIRnqWu61fPYHsZp8fy8hc0PdSLYPdHF401Z0pSP/wpG7hj0KJxbV1BVxnEYm1pDL6qWCNfV7XnBsKu0rIcljU0FQOW0TRh83HyX3eTlPWxd39kyvsE2ERkXwWSrHOAf1EpWn/e2tG2AVOb2VB8Vipo2tcO5ND4Gqqf8Ofa0STdx/teskOibi5fX305F7Ks0y5Q5IjLgP/t5sHz39CXH8UEoBgn4tmI4VtbPGhiQ0=
+          |1|N0+qNuzOGp6EqEFbbW0YGguSKCs=|ievS/CMeMR6DlWKeMD4+3dCyAMQ= ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIFk3umLsyjEw3sINMq19OGAkyEnRoW41FG/smdj/8kdO
+          KNOWN_HOSTS
+          chmod 600 ~/.ssh/known_hosts
 
       - name: Deploy Application Code
         run: |
           ssh ${{ secrets.GCP_VM_USER }}@${{ secrets.GCP_VM_HOST }} << 'EOF'
             set -e
             cd ${{ env.TARGET_DIR }}
+            
+            # ── NEW: Comprehensive Code Backup ──
+            mkdir -p ~/backups
+            TIMESTAMP=$(date +%Y%m%d_%H%M%S)
+            tar -czf ~/backups/mltrain_backup_${TIMESTAMP}.tar.gz . \
+              --exclude="./.git" --exclude="./.venv" --exclude="./__pycache__" --exclude="./*.pt" \
+              --exclude="./*.onnx" --exclude="./*.onnx.data" || true
+            
+            # Keep only the last 5 backups
+            ls -t ~/backups/mltrain_backup_*.tar.gz | tail -n +6 | xargs rm -f 2>/dev/null || true
 
-            # Backup current venv for rollback
+            # Backup current venv for immediate rollback
             [ -d .venv ] && (rm -rf .venv.backup && cp -r .venv .venv.backup) || true
 
             git pull origin main

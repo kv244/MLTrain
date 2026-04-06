@@ -31,15 +31,15 @@ class Connect4:
     def check_win(self, r, c):
         p = self.board[r, c]
         for dr, dc in ((0, 1), (1, 0), (1, 1), (1, -1)):
-            count = 1
+            line = [(r, c)]
             for sign in (1, -1):
                 nr, nc = r + dr * sign, c + dc * sign
                 while 0 <= nr < 6 and 0 <= nc < 7 and self.board[nr, nc] == p:
-                    count += 1
+                    line.append((nr, nc))
                     nr += dr * sign
                     nc += dc * sign
-            if count >= 4:
-                return True
+            if len(line) >= 4:
+                return line
         return False
 
 
@@ -184,10 +184,11 @@ def run_mcts_simulations(
     game:   Connect4,
     model,                   # AlphaNet — assumed to be on `device` and in eval()
     device: torch.device,
-    num_sims:            int   = 400,
-    c_puct:              float = 1.5,
+    num_sims:            int   = 800,
+    c_puct:              float = 1.0,
     temperature:         float = 1.0,
     add_dirichlet_noise: bool  = False,
+    return_root:         bool  = False,
 ) -> np.ndarray:
     """
     Run `num_sims` MCTS simulations from `game` and return a length-7
@@ -240,7 +241,8 @@ def run_mcts_simulations(
     if temperature == 0:
         probs = np.zeros(7, dtype=np.float32)
         probs[int(np.argmax(visits))] = 1.0
-        return probs
+    else:
+        visits **= (1.0 / temperature)
+        probs = (visits / visits.sum()).astype(np.float32)
 
-    visits **= (1.0 / temperature)
-    return (visits / visits.sum()).astype(np.float32)
+    return (probs, root) if return_root else probs

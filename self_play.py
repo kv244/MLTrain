@@ -19,6 +19,7 @@ Batching strategy (leaf parallelism):
 import numpy as np
 import torch
 import torch.nn.functional as F
+import random
 
 from mcts import Connect4, MCTSNode, board_to_tensor, _add_dirichlet_noise
 
@@ -28,9 +29,9 @@ from mcts import Connect4, MCTSNode, board_to_tensor, _add_dirichlet_noise
 def run_self_play_game(
     model,
     device:         torch.device,
-    num_sims:       int   = 400,
-    temp_threshold: int   = 20,
-    c_puct:         float = 1.5,
+    num_sims:       int   = 800,
+    temp_threshold: int   = 12,
+    c_puct:         float = 1.0,
 ) -> list:
     """Play one game; return list of (state, policy_target, value_target)."""
     from mcts import run_mcts_simulations
@@ -66,10 +67,10 @@ def run_self_play_game(
 def run_batched_self_play(
     model,
     device:         torch.device,
-    num_games:      int   = 64,
-    num_sims:       int   = 400,
-    c_puct:         float = 1.5,
-    temp_threshold: int   = 20,
+    num_games:      int   = 128,
+    num_sims:       int   = 800,
+    c_puct:         float = 1.0,
+    temp_threshold: int   = 12,
 ) -> list:
     """
     Play `num_games` games simultaneously using one batched GPU call per MCTS
@@ -82,6 +83,16 @@ def run_batched_self_play(
 
     # Per-game state
     games       = [Connect4()       for _ in range(num_games)]
+
+    # ── Step 3: Balanced Opening Curriculum ──────────────────────────────
+    # Pre-seed 2-4 random moves for diversity
+    for game in games:
+        n_seed = random.randint(2, 4)
+        for _ in range(n_seed):
+            valid = game.get_valid_moves()
+            if not valid: break
+            game.play(random.choice(valid))
+
     histories   = [[]               for _ in range(num_games)]
     move_counts = [0]               * num_games
     active      = list(range(num_games))   # indices of games still running

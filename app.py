@@ -38,6 +38,13 @@ limiter = Limiter(
     storage_uri=LIMITER_STORAGE
 )
 
+if LIMITER_STORAGE.startswith("memory://"):
+    print(
+        "[WARNING] Rate limiter is using in-process memory storage. "
+        "This does not work correctly with multi-worker Gunicorn. "
+        "Set LIMITER_STORAGE_URI to a Redis URL for production."
+    )
+
 @app.errorhandler(429)
 def ratelimit_handler(e):
     return jsonify(error="Too Many Requests", description=str(e.description)), 429
@@ -184,7 +191,7 @@ def get_move():
 
     # FIX 3: safe int coercion
     try:
-        simulations = max(1, min(int(data.get("simulations", 400)), 2048))
+        simulations = max(1, min(int(data.get("simulations", 800)), 5000))
     except (TypeError, ValueError):
         return jsonify({"error": "Invalid simulations value"}), 400
     
@@ -215,7 +222,27 @@ def get_move():
     # Numpy arrays from lists will be [6, 7], Python expects [r][c].
     game.current_player = current_player
 
-    print(f"Evaluating board using {checkpoint_name} for player {current_player}...")
+    # ── Step 6: Dynamic Simulation Budget ──
+    if simulations >= 200:
+        # Run a fast 50-sim pass to estimate position complexity
+        _, root = run_mcts_simulations(
+            game, model, device,
+            num_sims=50,
+            temperature=0,
+            add_dirichlet_noise=False,
+            return_root=True
+        )
+        root_val = root.q_value
+        # If position is contested/complex, boost the budget
+        if abs(root_val) < 0.4:
+            simulations = min(5000, int(simulations * 1.5))
+            print(f"[Adaptive] Contested position (q={root_val:.2f}). Boosting sims to {simulations}")
+        # If position is nearly decided, reduce the budget
+        elif abs(root_val) > 0.85:
+            simulations = max(50, int(simulations * 0.5))
+            print(f"[Adaptive] Decided position (q={root_val:.2f}). Reducing sims to {simulations}")
+
+    print(f"Evaluating board using {checkpoint_name} for player {current_player} (sims={simulations})...")
 
     start_time = time.time()
     mcts_probs = run_mcts_simulations(
@@ -238,10 +265,24 @@ def get_move():
     
     best_move = int(np.argmax(mcts_probs))
     
+    # ── Step 1: Detect Winning Cells ──
+    winning_cells = []
+    game_clone = game.clone()
+    win_result = game_clone.play(best_move)
+    if win_result:
+        row, col = win_result
+        # The game engine `play` was modified to move internal state,
+        # but we need to check the state AFTER the move was made.
+        # However, `play` in Connect4 already placed the piece.
+        win_cells = game_clone.check_win(row, col)
+        if win_cells:
+            winning_cells = [[int(r), int(c)] for r, c in win_cells]
+
     return jsonify({
         "move": best_move,
         "probs": [float(p) for p in mcts_probs],
-        "inference_time_ms": inference_time * 1000
+        "inference_time_ms": inference_time * 1000,
+        "winning_cells": winning_cells
     })
 
 PERSONALITY_QUOTES = {
@@ -274,7 +315,7 @@ def assess_move():
 
     # FIX 3: safe int coercion
     try:
-        simulations = max(1, min(int(data.get("simulations", 400)), 2048))
+        simulations = max(1, min(int(data.get("simulations", 800)), 5000))
     except (TypeError, ValueError):
         return jsonify({"error": "Invalid simulations value"}), 400
 
@@ -327,14 +368,26 @@ def assess_move():
     import random
     quote = random.choice(PERSONALITY_QUOTES.get(score, ["Analysis complete."]))
 
+    # ── Step 1: Detect Winning Cells ──
+    winning_cells = []
+    game_clone = game.clone()
+    win_result = game_clone.play(move)
+    if win_result:
+        row, col = win_result
+        win_cells = game_clone.check_win(row, col)
+        if win_cells:
+            winning_cells = [[int(r), int(c)] for r, c in win_cells]
+
     return jsonify({
         "score": score,
         "comment": comment,
         "ai_quote": quote,
         "best_move": int(np.argmax(mcts_probs)),
-        "probs": [float(p) for p in mcts_probs]
+        "probs": [float(p) for p in mcts_probs],
+        "winning_cells": winning_cells
     })
 
+@app.route("/health")
 def health():
     return jsonify({"status": "ok"}), 200
 

@@ -462,6 +462,64 @@ For now, two prominent corners are very Manga-style. */
     box-shadow: 0 0 15px var(--primary-color);
 }
 
+/* Step 1.3: Winning Cell Highlighting */
+.winning-spot {
+    z-index: 10;
+    box-shadow: 0 0 30px var(--neon-magenta), inset 0 0 20px white !important;
+    animation: win-pulse 0.8s infinite alternate ease-in-out !important;
+    border: 2px solid white !important;
+}
+
+@keyframes win-pulse {
+    from { transform: scale(1); filter: brightness(1); }
+    to { transform: scale(1.15); filter: brightness(1.5) contrast(1.2); }
+}
+
+/* Step 3: Heatmap Visuals */
+.heatmap-layer {
+    display: flex;
+    gap: 10px;
+    width: calc(7 * 60px + 6 * 10px + 50px); /* Match board width (spots + gaps + padding) */
+    padding: 0 25px;
+    margin-top: -15px; /* Pull it closer to board */
+    height: 10px;
+    justify-content: center;
+}
+
+.heatmap-bar {
+    width: 60px;
+    height: 100%;
+    background: var(--neon-cyan);
+    opacity: 0.1;
+    border-radius: 4px;
+    transition: transform 0.4s ease, opacity 0.4s ease;
+    box-shadow: 0 0 10px var(--neon-cyan);
+    transform-origin: top;
+}
+
+/* UI Utility Classes */
+.mt-mid { margin-top: 1.5rem; }
+.mt-loose { margin-top: 2rem; }
+.control-hint { font-size: 0.7rem; color: #8b949e; margin-top: 0.25rem; }
+
+.outline-btn {
+    background: transparent;
+    border: 1px solid var(--primary-color);
+    color: var(--primary-color);
+}
+
+.outline-btn:hover:not(:disabled) {
+    background: rgba(0, 229, 255, 0.1);
+    box-shadow: 0 0 10px var(--primary-color);
+}
+
+.outline-btn:disabled {
+    opacity: 0.3;
+    cursor: default;
+    border-color: #444;
+    color: #666;
+}
+
 /* --- Mobile Responsiveness (MAX-WIDTH: 600PX) --- */
 @media (max-width: 600px) {
     body {

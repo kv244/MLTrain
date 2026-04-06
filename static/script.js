@@ -2,6 +2,7 @@
 const ROWS = 6;
 const COLS = 7;
 let board = [];
+let boardHistory = []; // Step 5: Undo stack
 let currentPlayer = 1; // 1 = Human, -1 = AI (default if AI plays first)
 let humanPlayer = 1;
 let gameOver = false;
@@ -23,6 +24,9 @@ const _badge = document.getElementById('turnBadge');
 const _boardArea = document.getElementById('boardArea');
 const _btnReset = document.getElementById('btnReset');
 const _btnAudio = document.getElementById('btnToggleAudio');
+const _btnHint = document.getElementById('btnHint');
+const _btnUndo = document.getElementById('btnUndo');
+const _heatmapLayer = document.getElementById('heatmapLayer');
 
 // Init
 document.addEventListener("DOMContentLoaded", () => {
@@ -36,8 +40,16 @@ document.addEventListener("DOMContentLoaded", () => {
             syncAudioUI(isPlaying);
         });
     }
-    
-    
+
+    // Step 4: Hint button
+    if (_btnHint) {
+        _btnHint.addEventListener('click', () => getHint());
+    }
+
+    // Step 5: Undo button
+    if (_btnUndo) {
+        _btnUndo.addEventListener('click', () => undoMove());
+    }
 
     // Start controls
     document.getElementById('btnPlayerFirst').addEventListener('click', () => startGame(1));
@@ -79,7 +91,10 @@ async function loadModels() {
 function initBoard() {
     _board.innerHTML = '';
     board = Array(ROWS).fill(0).map(() => Array(COLS).fill(0));
-    
+    boardHistory = []; // Clear history
+    updateActionButtons();
+    hideHeatmap();
+
     for (let c = 0; c < COLS; c++) {
         const colDiv = document.createElement('div');
         colDiv.classList.add('column');
@@ -136,8 +151,12 @@ async function handleColumnClick(c) {
     // Check if row 0 (top) is empty
     if (board[0][c] !== 0) return;
 
+    // Save history BEFORE move
+    saveHistory();
+
     // Disable board immediately during processing
     _board.classList.add('disabled');
+    hideHeatmap();
 
     // PRE-MOVE: Save state for assessment
     const boardBefore = JSON.parse(JSON.stringify(board));
@@ -152,8 +171,15 @@ async function handleColumnClick(c) {
     playMove(r, c, humanPlayer);
 
     // FETCH ASSESSMENT (Sequential to avoid server crash)
-    await fetchAssessment(boardBefore, c, humanPlayer); // FIX 13: pass current mover
+    const assessment = await fetchAssessment(boardBefore, c, humanPlayer);
 
+    // Step 1.4: Use server-provided winning cells if available
+    if (assessment && assessment.winning_cells && assessment.winning_cells.length > 0) {
+        endGame("You Win!", assessment.winning_cells);
+        return;
+    }
+
+    // Local fallback check
     const winningLine = checkWinResult(r, c, humanPlayer);
     if (winningLine) {
         endGame("You Win!", winningLine);
@@ -168,9 +194,9 @@ async function handleColumnClick(c) {
     triggerAiMove();
 }
 
-async function fetchAssessment(prevBoard, move, movingPlayer) { // FIX 13: added param
+async function fetchAssessment(prevBoard, move, movingPlayer) { 
     const sims = parseInt(_difficultySelect.value, 10);
-    if (isNaN(sims) || sims < 1) return; // FIX 15: validate difficulty
+    if (isNaN(sims) || sims < 1) return null;
 
     try {
         const res = await fetch('/api/assess', {
@@ -180,38 +206,38 @@ async function fetchAssessment(prevBoard, move, movingPlayer) { // FIX 13: added
                 model: _modelSelect.value,
                 board: prevBoard,
                 move: move,
-                current_player: movingPlayer, // FIX 13: use movingPlayer
-                simulations: sims // FIX 15: use validated sims
+                current_player: movingPlayer, 
+                simulations: sims 
             })
         });
 
         if (!res.ok) {
             const errData = await res.json().catch(() => ({}));
             console.error("Assessment API error:", res.status, errData);
-            return;
+            return null;
         }
 
         const data = await res.json();
         if (data.score) {
             showAssessment(data);
         }
+        return data;
     } catch (e) {
         console.error("Assessment failed due to network error", e);
+        return null;
     }
 }
 
 function showAssessment(data) {
-    console.log("Showing assessment UI:", data);
     const container = document.getElementById('assessmentContainer');
     
-    // FIX 14: Use textContent for server-supplied strings
+    // Create fragment for better perf
     const badge = document.createElement('div');
     badge.className = 'assessment-badge';
     
     const starsDiv = document.createElement('div');
     starsDiv.className = 'stars';
     
-    // Sequential star pop-in
     for (let i = 0; i < data.score; i++) {
         const s = document.createElement('span');
         s.className = 'star-filled';
@@ -243,12 +269,10 @@ function showAssessment(data) {
     container.innerHTML = '';
     container.appendChild(badge);
     
-    // Audio Reactivity
     if (typeof AudioEngine !== 'undefined' && AudioEngine.isPlaying) {
         AudioEngine.setIntensity(data.score);
     }
 
-    // Highlight best move if it was a blunder (score <= 2)
     clearBestMoveHint();
     if (data.score <= 2) {
         const bestCol = document.querySelector(`.column[data-col="${data.best_move}"]`);
@@ -286,23 +310,94 @@ function getLowestEmptyRow(c) {
 function playMove(r, c, player) {
     board[r][c] = player;
     const spot = document.getElementById(`spot-${r}-${c}`);
-    // visually map to css classes
     if (player === 1) spot.classList.add('chip-1');
-    else spot.classList.add('chip-2');
+    else if (player === -1) spot.classList.add('chip-2');
+}
+
+// Step 4: Hint function
+async function getHint() {
+    if (gameOver || currentPlayer !== humanPlayer) return;
+    
+    _btnHint.disabled = true;
+    _btnHint.innerText = "Thinking...";
+    
+    try {
+        const sims = parseInt(_difficultySelect.value, 10);
+        const res = await fetch('/api/move', { // Using move endpoint for "pure" AI best move
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({
+                model: _modelSelect.value,
+                board: board,
+                current_player: humanPlayer,
+                simulations: sims
+            })
+        });
+        
+        if (!res.ok) throw new Error("API failed");
+        
+        const data = await res.json();
+        const bestColIdx = data.move;
+        
+        // Visual Hint
+        clearBestMoveHint();
+        const colEl = document.querySelector(`.column[data-col="${bestColIdx}"]`);
+        if (colEl) {
+            colEl.classList.add('best-move-hint');
+            // Remove after 3s
+            setTimeout(() => colEl.classList.remove('best-move-hint'), 3000);
+        }
+    } catch (e) {
+        console.error("Hint failed", e);
+    } finally {
+        _btnHint.disabled = false;
+        _btnHint.innerText = "Get Hint";
+    }
+}
+
+// Step 5: Undo Move
+function saveHistory() {
+    boardHistory.push(JSON.parse(JSON.stringify(board)));
+}
+
+function undoMove() {
+    if (boardHistory.length < 2 || gameOver || currentPlayer !== humanPlayer) return;
+
+    // Pop the state from BEFORE AI's move AND the state from BEFORE player's move
+    boardHistory.pop(); // AI state
+    const previousState = boardHistory.pop();
+    
+    board = previousState;
+    renderBoard();
+    clearAssessment();
+    hideHeatmap();
+    updateActionButtons();
+}
+
+function renderBoard() {
+    for (let r = 0; r < ROWS; r++) {
+        for (let c = 0; c < COLS; c++) {
+            const spot = document.getElementById(`spot-${r}-${c}`);
+            spot.className = 'spot'; // Reset
+            if (board[r][c] === 1) spot.classList.add('chip-1');
+            else if (board[r][c] === -1) spot.classList.add('chip-2');
+        }
+    }
 }
 
 async function triggerAiMove() {
     const sims = parseInt(_difficultySelect.value, 10);
-    if (isNaN(sims) || sims < 1) return; // FIX 15: validate difficulty
+    if (isNaN(sims) || sims < 1) return;
 
     _board.classList.add('disabled');
+    updateActionButtons();
     
     try {
         const payload = {
             model: _modelSelect.value,
             board: board,
             current_player: currentPlayer,
-            simulations: sims // FIX 15: use validated sims
+            simulations: sims 
         };
 
         const res = await fetch('/api/move', {
@@ -312,19 +407,7 @@ async function triggerAiMove() {
         });
 
         if (!res.ok) {
-            let errorMsg = "Server Error";
-            try {
-               const data = await res.json();
-               errorMsg = data.error || data.description || `Error ${res.status}`;
-            } catch(e) {
-               errorMsg = `HTTP Error ${res.status}`;
-            }
-            
-            if (res.status === 429) {
-               endGame("Rate Limit Exceeded");
-            } else {
-               endGame(errorMsg);
-            }
+            endGame(`Error ${res.status}`);
             return;
         }
 
@@ -344,7 +427,16 @@ async function triggerAiMove() {
             return;
         }
 
+        // Step 3: Show heatmap
+        if (data.probs) showHeatmap(data.probs);
+
         playMove(row, col, currentPlayer);
+
+        // Step 1.4: Use server-provided winning cells
+        if (data.winning_cells && data.winning_cells.length > 0) {
+            endGame("AI Wins!", data.winning_cells);
+            return;
+        }
 
         const winningLine = checkWinResult(row, col, currentPlayer);
         if (winningLine) {
@@ -358,6 +450,7 @@ async function triggerAiMove() {
         currentPlayer *= -1;
         updateTurnUI();
         _board.classList.remove('disabled');
+        updateActionButtons();
 
     } catch (e) {
         console.error("Network error fetching AI move", e);
@@ -365,15 +458,29 @@ async function triggerAiMove() {
     }
 }
 
+// Step 3: Heatmap logic
+function showHeatmap(probs) {
+    _heatmapLayer.classList.remove('hidden');
+    probs.forEach((p, i) => {
+        const bar = document.getElementById(`bar-${i}`);
+        if (bar) {
+            bar.style.transform = `scaleY(${p * 2.5})`; // Scale for visibility
+            bar.style.opacity = Math.max(0.1, p);
+        }
+    });
+}
+
+function hideHeatmap() {
+    _heatmapLayer.classList.add('hidden');
+}
+
 function checkWinResult(r, c, player) {
     const directions = [[0, 1], [1, 0], [1, 1], [1, -1]];
-    
     for (let [dr, dc] of directions) {
         let line = [[r, c]];
         for (let sign of [1, -1]) {
             let nr = r + dr * sign;
             let nc = c + dc * sign;
-            
             while (nr >= 0 && nr < ROWS && nc >= 0 && nc < COLS && board[nr][nc] === player) {
                 line.push([nr, nc]);
                 nr += dr * sign;
@@ -386,7 +493,6 @@ function checkWinResult(r, c, player) {
 }
 
 function isDraw() {
-    // Check if top row is full
     for (let c = 0; c < COLS; c++) {
         if (board[0][c] === 0) return false;
     }
@@ -407,32 +513,38 @@ function updateTurnUI() {
     }
 }
 
+function updateActionButtons() {
+    if (_btnHint) _btnHint.disabled = gameOver || currentPlayer !== humanPlayer;
+    if (_btnUndo) _btnUndo.disabled = gameOver || currentPlayer !== humanPlayer || boardHistory.length < 2;
+}
+
 function endGame(message, winningLine = null) {
     gameOver = true;
     _board.classList.add('disabled');
+    updateActionButtons();
     
     _badge.innerText = message;
     _badge.className = "player-turn-badge"; 
     
     let winnerId = "draw";
-    
-    // Add a specific generic class based on win
     if (message.includes("You")) {
         _badge.classList.add('turn-p1');
         stats.player++;
         winnerId = "human";
-    }
-    else if (message.includes("AI")) {
+    } else if (message.includes("AI")) {
         _badge.classList.add('turn-p2');
         stats.ai++;
         winnerId = "ai";
     }
 
-    // Trigger randomized win effect if there is a winner
     if (winnerId !== "draw" && winningLine) {
+        // Step 1.3: Highlight winning cells
+        winningLine.forEach(([r, c]) => {
+            const spot = document.getElementById(`spot-${r}-${c}`);
+            if (spot) spot.classList.add('winning-spot');
+        });
+
         WinEffects.triggerRandom(winnerId, winningLine);
-        
-        // LOCK UI: DELAY reset button for 1.5s to show off the finisher
         setTimeout(() => {
             _btnReset.classList.remove('hidden');
         }, 1500);
@@ -445,7 +557,6 @@ function endGame(message, winningLine = null) {
         localStorage.setItem("c4_stats", JSON.stringify(stats));
         updateStatsUI();
         
-        // Push telemetry
         fetch('/api/game_end', {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},

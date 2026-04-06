@@ -17,7 +17,8 @@
       "Bash(python -c \"import sys,json; d=json.load\\(sys.stdin\\); print\\('Claude Code CLI:', d['version']\\)\")",
       "Read(//c/Users/julia/**)",
       "Bash(python -c ':*)",
-      "Bash(wc:*)"
+      "Bash(wc:*)",
+      "Bash(ls:*)"
     ]
   }
 }

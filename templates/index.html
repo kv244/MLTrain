@@ -39,20 +39,25 @@
             </div>
             
             <div class="control-group">
-                <label for="difficultySelect">AI Calculation Depth</label>
+                <label for="difficultySelect">AI Difficulty</label>
                 <select id="difficultySelect" class="styled-select">
-                    <option value="50">Leisure (Fastest)</option>
-                    <option value="400" selected>Standard (Balanced)</option>
-                    <option value="800">Tactical (Skilled)</option>
-                    <option value="1200">Expert (Slow)</option>
-                    <option value="2000">Cyber-God (Resource Intensive)</option>
+                    <option value="100">Easy (100 sims)</option>
+                    <option value="800" selected>Medium (800 sims)</option>
+                    <option value="2000">Hard (2000 sims)</option>
                 </select>
+                <p class="control-hint">Affects AI thinking depth and strategy quality.</p>
             </div>
 
             <!-- Start Game Controls -->
              <div class="action-buttons">
-                <button id="btnPlayerFirst" class="btn primary-btn">You Play First (X)</button>
-                <button id="btnAiFirst" class="btn secondary-btn">AI Plays First (O)</button>
+                <button id="btnPlayerFirst" class="btn primary-btn">You Play First</button>
+                <button id="btnAiFirst" class="btn secondary-btn">AI Plays First</button>
+             </div>
+
+             <!-- In-Game Actions -->
+             <div class="action-buttons mt-mid" id="ingameActions">
+                <button id="btnHint" class="btn outline-btn" disabled>Get Hint</button>
+                <button id="btnUndo" class="btn outline-btn" disabled>Undo Move</button>
              </div>
              
              <!-- Stats Panel -->
@@ -90,6 +95,17 @@
             <!-- The Connect 4 Grid -->
             <div class="connect4-board" id="c4Board">
                 <!-- Columns and spots will be injected by JavaScript -->
+            </div>
+            
+            <!-- Step 3: Probability Heatmap Layer -->
+            <div id="heatmapLayer" class="heatmap-layer hidden">
+                <div class="heatmap-bar" id="bar-0"></div>
+                <div class="heatmap-bar" id="bar-1"></div>
+                <div class="heatmap-bar" id="bar-2"></div>
+                <div class="heatmap-bar" id="bar-3"></div>
+                <div class="heatmap-bar" id="bar-4"></div>
+                <div class="heatmap-bar" id="bar-5"></div>
+                <div class="heatmap-bar" id="bar-6"></div>
             </div>
             
             <button id="btnReset" class="btn secondary-btn btn-small mt-loose hidden">Restart Game</button>

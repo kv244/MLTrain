@@ -65,7 +65,7 @@ def get_human_move(game: Connect4) -> int:
 def main():
     parser = argparse.ArgumentParser(description="Play Connect 4 against a trained AlphaZero model.")
     parser.add_argument("--model", type=str, required=True, help="Path to the model file (.pt for PyTorch, .onnx for OpenVINO).")
-    parser.add_argument("--simulations", type=int, default=400, help="Number of MCTS simulations per AI move.")
+    parser.add_argument("--simulations", type=int, default=800, help="Number of MCTS simulations per AI move.")
     parser.add_argument("--human-first", action="store_true", help="Set this flag for the human to play first as 'X'.")
     args = parser.parse_args()
 

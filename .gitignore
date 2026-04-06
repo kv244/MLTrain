@@ -23,3 +23,8 @@ dist/
 # Logs and Data
 *.csv
 *.log
+
+# Diagnostic Artifacts
+*.png
+viz_*/
+eval_models.py
