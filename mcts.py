@@ -26,11 +26,9 @@ class Connect4:
         for row in range(5, -1, -1):
             if self.board[row, col] == 0:
                 self.board[row, col] = self.current_player
-                # Store the last move for win checking
-                last_move = (row, col, self.current_player)
                 self.current_player *= -1
                 self.move_count += 1
-                return last_move
+                return row, col
         return None
 
     def get_valid_moves(self):
@@ -40,7 +38,11 @@ class Connect4:
                 valid.append(col)
         return valid
 
-    def check_win(self, row, col, player):
+    def check_win(self, row, col):
+        # Last player who moved was the previous player
+        player = self.board[row, col]
+        if player == 0: return False
+        
         directions = [(0, 1), (1, 0), (1, 1), (1, -1)]
         for dr, dc in directions:
             count = 1
@@ -129,16 +131,15 @@ class MCTSNode:
         if sum_p > 0:
             for move in valid_moves:
                 child_game = self.game.clone()
-                res = child_game.play(move) # Returns (r, c, player)
+                r, c = child_game.play(move) 
                 child = MCTSNode(child_game, parent=self)
                 child.prior = policy_probs[move] / sum_p
                 
                 # Check terminal status during expansion
-                if child_game.check_win(res[0], res[1], res[2]):
-                    # Player who just moved won.
-                    # Relative to the parent's current_player (who picked the move):
-                    # If current_player (1) picked move and won, value is 1.0
-                    child.terminal_value = 1.0
+                if child_game.check_win(r, c):
+                    # Previous player (parent_player) won.
+                    # Value from perspective of current player (child_game.current_player) is -1.0.
+                    child.terminal_value = -1.0
                 elif not child_game.get_valid_moves():
                     child.terminal_value = 0.0 # Draw
                     
@@ -159,7 +160,7 @@ def _add_dirichlet_noise(node: MCTSNode, epsilon: float = 0.25):
     if not node.children:
         return
 
-    alpha = 1.0 # Standard for Connect 4 acción space
+    alpha = 1.0
     actions = list(node.children.keys())
     noise = np.random.dirichlet([alpha] * len(actions))
     
@@ -205,7 +206,7 @@ def run_mcts_simulations(
         # Selection
         while not node.is_leaf():
             _, node = node.select_child(c_puct)
-            if node.is_terminal(): # FIX: Handle terminal leaf in selection path
+            if node.is_terminal(): 
                 break
             
         # Leaf evaluation
