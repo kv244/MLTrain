@@ -27,192 +27,150 @@ from mcts import Connect4, MCTSNode, board_to_tensor, _add_dirichlet_noise
 # ── Single-game self-play (kept for reference / debugging) ───────────────────
 
 def run_self_play_game(
-    model,
-    device:         torch.device,
-    num_sims:       int   = 800,
-    temp_threshold: int   = 12,
-    c_puct:         float = 1.0,
+    model: torch.nn.Module,
+    device: torch.device,
+    num_sims: int = 400,
+    c_puct: float = 1.0,
+    temp_threshold: int = 12,
+    epsilon: float = 0.25,
 ) -> list:
-    """Play one game; return list of (state, policy_target, value_target)."""
+    """
+    Simulates a full Connect 4 game from start to finish
+    applying the search parameters provided.
+    """
     from mcts import run_mcts_simulations
-
-    model.eval()
     game = Connect4()
-    history = []
-    move_count = 0
-
+    states = []
+    
+    # ── Game Loop ─────────────────────────────────────────────────────────────
     while True:
-        temperature = 1.0 if move_count < temp_threshold else 0.0
-        mcts_probs  = run_mcts_simulations(
-            game, model, device,
-            num_sims=num_sims, c_puct=c_puct,
-            temperature=temperature, add_dirichlet_noise=True,
+        # Determine current search temperature:
+        # - High (1.0) during opening (up to temp_threshold) for diversity
+        # - Low (0.01) thereafter for tactical precision
+        temp = 1.0 if game.move_count < temp_threshold else 0.01
+        
+        # Run MCTS simulations for current position
+        probs = run_mcts_simulations(
+            game,
+            model,
+            device,
+            num_sims=num_sims,
+            temperature=temp,
+            add_dirichlet_noise=True,
+            epsilon=epsilon
         )
-        history.append((board_to_tensor(game), mcts_probs, game.current_player))
-
-        move = int(np.random.choice(7, p=mcts_probs))
+        
+        # Save state: (normalized_board, mcts_probs, current_player)
+        states.append((game.board.copy(), probs, game.current_player))
+        
+        # Sample move from the MCTS probability distribution
+        move = np.random.choice(7, p=probs)
         r, c = game.play(move)
-        move_count += 1
-
+        
         if game.check_win(r, c):
             winner = -game.current_player; break
         if not game.get_valid_moves():
             winner = 0; break
 
-    return _history_to_training_data(history, winner)
+    return _history_to_training_data(states, winner)
 
 
 # ── Batched self-play ─────────────────────────────────────────────────────────
 
 def run_batched_self_play(
-    model,
-    device:         torch.device,
-    num_games:      int   = 128,
-    num_sims:       int   = 800,
-    c_puct:         float = 1.0,
-    temp_threshold: int   = 12,
+    model: torch.nn.Module,
+    device: torch.device,
+    num_games: int = 64,
+    num_sims: int = 400,
+    c_puct: float = 1.0,
+    temp_threshold: int = 12,
+    epsilon: float = 0.25,
 ) -> list:
     """
     Play `num_games` games simultaneously using one batched GPU call per MCTS
     simulation step.
-
-    Returns a flat list of (state_tensor, policy_target, value_target) tuples
-    from all completed games, ready to extend() into the replay buffer.
     """
     model.eval()
-
-    # Per-game state
-    games       = [Connect4()       for _ in range(num_games)]
-
-    # ── Step 3: Balanced Opening Curriculum ──────────────────────────────
-    # Pre-seed 2-4 random moves for diversity
-    for game in games:
-        n_seed = random.randint(2, 4)
-        for _ in range(n_seed):
-            valid = game.get_valid_moves()
-            if not valid: break
-            game.play(random.choice(valid))
-
-    histories   = [[]               for _ in range(num_games)]
-    move_counts = [0]               * num_games
-    active      = list(range(num_games))   # indices of games still running
-    roots       = {i: None for i in range(num_games)} # Current MCTS root for each game
-    all_data    = []
+    games = [Connect4() for _ in range(num_games)]
+    histories = [[] for _ in range(num_games)]
+    move_counts = [0] * num_games
+    active = list(range(num_games))
+    roots = {i: None for i in range(num_games)}
+    all_data = []
 
     while active:
-        # ── Expand/Update roots for all active games in one batch ────────────
-        # Only expand fresh roots for games that don't have a reusable subtree
         to_expand = [i for i in active if roots[i] is None]
         if to_expand:
-            new_roots = _expand_roots_batched(games, to_expand, model, device)
+            new_roots = _expand_roots_batched(games, to_expand, model, device, epsilon=epsilon)
             for i, node in new_roots.items():
                 roots[i] = node
         
-        # For reused roots, just add Dirichlet noise to the existing root
-        # (Already has visits and evaluations from previous moves)
         for i in active:
             if i not in to_expand and roots[i] is not None:
                 if roots[i].children:
-                    _add_dirichlet_noise(roots[i])
+                    _add_dirichlet_noise(roots[i], epsilon=epsilon)
 
-        # ── num_sims-1 further simulations with batched leaf evaluation ───
         for _ in range(num_sims - 1):
-            to_evaluate = []   # (game_idx, leaf_node) — needs network
-
+            to_evaluate = []
             for i in active:
                 node = roots[i]
-                # Selection
                 while not node.is_leaf():
                     _, node = node.select_child(c_puct)
-
                 if node.is_terminal():
                     node.backpropagate(node.terminal_value)
                 else:
                     to_evaluate.append((i, node))
 
-            # Batch GPU call for all non-terminal leaves
             if to_evaluate:
-                leaf_states = torch.stack(
-                    [board_to_tensor(nd.game) for _, nd in to_evaluate]
-                ).to(device)
-
+                leaf_states = torch.stack([board_to_tensor(nd.game) for _, nd in to_evaluate]).to(device)
                 with torch.inference_mode(), torch.amp.autocast(device.type):
                     policy_logits, values = model(leaf_states)
-
                 leaf_probs = F.softmax(policy_logits, dim=1).cpu().numpy()
-
                 for j, (i, node) in enumerate(to_evaluate):
                     node.expand(leaf_probs[j])
-                    node.backpropagate(values[j].float().item()) # FIX 12
+                    node.backpropagate(values[j].float().item())
 
-        # ── Pick moves for every active game ──────────────────────────────
         newly_done = []
         for i in active:
-            temperature = 1.0 if move_counts[i] < temp_threshold else 0.0
-            probs       = _visits_to_probs(roots[i], temperature)
-
-            # Store this move's training tuple
-            histories[i].append((
-                board_to_tensor(games[i]),
-                probs,
-                games[i].current_player,
-            ))
-
-            # Advance game
+            temperature = 1.0 if move_counts[i] < temp_threshold else 0.01
+            probs = _visits_to_probs(roots[i], temperature)
+            histories[i].append((board_to_tensor(games[i]), probs, games[i].current_player))
             move = int(np.random.choice(7, p=probs))
             r, c = games[i].play(move)
             move_counts[i] += 1
 
-            # Check terminal
             if games[i].check_win(r, c):
                 winner = -games[i].current_player
                 all_data.extend(_history_to_training_data(histories[i], winner))
                 newly_done.append(i)
             elif not games[i].get_valid_moves():
-                # Pass winner=0 explicitly
-                all_data.extend(_history_to_training_data(histories[i], winner=0))
+                all_data.extend(_history_to_training_data(histories[i], 0))
                 newly_done.append(i)
             else:
-                # Reuse subtree for next move
                 chosen_child = roots[i].children.get(move)
                 if chosen_child and chosen_child.children:
-                    # Reuse subtree: detach from parent to prevent memory leak
                     chosen_child.parent = None
                     roots[i] = chosen_child
                 else:
-                    roots[i] = None # fresh expansion next iteration
-
+                    roots[i] = None
         active = [i for i in active if i not in newly_done]
-
     return all_data
 
-
-# ── Internal helpers ──────────────────────────────────────────────────────────
-
-def _expand_roots_batched(games, active, model, device):
-    """
-    Create fresh MCTS roots for every active game, expand them with a single
-    batched network call, backpropagate the root value, and add Dirichlet noise.
-    Returns dict {game_idx: MCTSNode}.
-    """
-    states_batch = torch.stack(
-        [board_to_tensor(games[i]) for i in active]
-    ).to(device)
-
+def _expand_roots_batched(games, active, model, device, epsilon=0.25):
+    """Batched expansion of MCTS roots with Dirichlet noise initialization."""
+    states_batch = torch.stack([board_to_tensor(games[i]) for i in active]).to(device)
     with torch.inference_mode(), torch.amp.autocast(device.type):
         policy_logits, values = model(states_batch)
-
     policy_probs = F.softmax(policy_logits, dim=1).cpu().numpy()
 
     roots = {}
     for j, i in enumerate(active):
         root = MCTSNode(games[i].clone())
         root.expand(policy_probs[j])
-        root.backpropagate(values[j].float().item()) # FIX 12
+        root.backpropagate(values[j].float().item())
         if root.children:
-            _add_dirichlet_noise(root)
+            _add_dirichlet_noise(root, epsilon=epsilon)
         roots[i] = root
-
     return roots
 
 
@@ -222,12 +180,12 @@ def _visits_to_probs(root: MCTSNode, temperature: float) -> np.ndarray:
     for move, child in root.children.items():
         visits[move] = child.visit_count
 
-    if temperature == 0:
+    if temperature <= 0.01: # Use 0.01 for greedy-like sampling
         probs = np.zeros(7, dtype=np.float64)
         probs[int(np.argmax(visits))] = 1.0
         return probs
 
-    visits **= (1.0 / temperature)
+    visits = visits ** (1.0 / temperature)
     return visits / visits.sum()
 
 

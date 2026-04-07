@@ -21,7 +21,17 @@
       "Bash(ls:*)",
       "Bash(python visualize.py --checkpoint checkpoint_0410.pt --show-board --show-divergence --show-trajectory --show-saliency --output-dir viz_out)",
       "Bash(mkdir -p viz_out)",
-      "Bash(PYTHONIOENCODING=utf-8 python visualize.py --checkpoint checkpoint_0410.pt --show-board --show-divergence --show-trajectory --show-saliency --output-dir viz_out)"
+      "Bash(PYTHONIOENCODING=utf-8 python visualize.py --checkpoint checkpoint_0410.pt --show-board --show-divergence --show-trajectory --show-saliency --output-dir viz_out)",
+      "mcp__hardware-polyglot-hub__ask_gemini",
+      "mcp__hardware-polyglot-hub__ask_qwen",
+      "mcp__hardware-polyglot-hub__ask_deepseek",
+      "mcp__hardware-polyglot-hub__list_ollama_models",
+      "Bash(ollama pull:*)",
+      "Bash(ollama search:*)",
+      "Bash(ollama list:*)",
+      "WebSearch",
+      "Bash(ollama:*)",
+      "mcp__hardware-polyglot-hub__ask_gemma4"
     ]
   }
 }

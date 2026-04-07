@@ -28,7 +28,7 @@ from self_play import run_batched_self_play, _history_to_training_data
 from mcts import run_mcts_simulations, Connect4
 
 # ── Hyper-parameters ──────────────────────────────────────────────────────────
-PARALLEL_GAMES       = 128       # games played simultaneously per self-play phase
+PARALLEL_GAMES       = 64        # games played simultaneously per self-play phase
 TRAIN_STEPS_PER_ITER = 10        # gradient updates per iteration
 BATCH_SIZE           = 512
 NUM_SIMS             = 400       # Higher-quality trees for stronger models
@@ -54,8 +54,14 @@ optimizer = torch.optim.Adam(model.parameters(), lr=LEARNING_RATE, weight_decay=
 scaler    = torch.amp.GradScaler(device.type)
 
 start_iteration = 0
-pretrained_checkpoints = sorted(glob.glob("checkpoint_*.pt"))
+pretrained_checkpoints = sorted(
+    glob.glob("checkpoint_[0-9]*.pt"),
+    key=lambda x: int(os.path.basename(x).split('_')[1].split('.')[0])
+)
+
+# Debug: list found checkpoints to verify sorting
 if pretrained_checkpoints:
+    print(f"[{get_timestamp()}] Found {len(pretrained_checkpoints)} checkpoints.")
     latest_ckpt = pretrained_checkpoints[-1]
     print(f"[{get_timestamp()}] Resuming from {latest_ckpt}...")
     ckpt_data = torch.load(latest_ckpt, map_location=device, weights_only=True)
@@ -150,7 +156,7 @@ def train_step(states, target_p, target_v):
 def evaluate_model(current_model, best_model, device, n_games=EVAL_GAMES):
     """
     Play games between current model (+1) and best model (-1).
-    Returns win rate for current model (wins=1, draws=0.5).
+    Returns (wins, n_games) for statistical testing.
     """
     current_model.eval()
     best_model.eval()
@@ -160,7 +166,7 @@ def evaluate_model(current_model, best_model, device, n_games=EVAL_GAMES):
         game = Connect4()
         # Alternate who goes first
         current_player_at_start = 1 if i % 2 == 0 else -1
-        game.current_player = current_player_at_start # FIX 11
+        game.current_player = current_player_at_start
         
         while True:
             # Use 50 sims for fast evaluation
@@ -177,32 +183,38 @@ def evaluate_model(current_model, best_model, device, n_games=EVAL_GAMES):
                     wins += 1
                 break
             if not game.get_valid_moves():
-                wins += 0.5
+                wins += 0.5 # Draw
                 break
                 
-    return wins / n_games
+    return wins, n_games
 
 # ── Master loop ───────────────────────────────────────────────────────────────
 
 if __name__ == "__main__":
+    from scipy.stats import binomtest
+
     for iteration in range(start_iteration, TOTAL_ITERATIONS):
+        # A) Dirichlet Epsilon Decay
+        # Linear decay from 0.25 to 0.05
+        epsilon = max(0.05, 0.25 * (1.0 - iteration / TOTAL_ITERATIONS))
 
         # ── Phase 1: Self-Play (64 games, batched GPU calls) ────────────────
-        # Each simulation step evaluates up to 64 leaf nodes in one model() call.
         game_data = run_batched_self_play(
             model, device,
             num_games=PARALLEL_GAMES,
             num_sims=NUM_SIMS,
+            epsilon=epsilon
         )
         memory.extend(game_data)
 
-        print(f"[{get_timestamp()}] [{iteration:3d}] +{len(game_data):,} states  buffer={len(memory):,}", end="")
+        print(f"[{get_timestamp()}] [{iteration:3d}] +{len(game_data):,} states  buffer={len(memory):,} eps={epsilon:.2f}", end="")
 
         # ── Phase 2: Training ─────────────────────────────────────────────────
         if len(memory) >= BATCH_SIZE:
             total_loss = total_p = total_v = 0.0
             
-            dataset = ReplayBufferDataset(memory)
+            # Setup data loader for the current iteration
+            dataset = ReplayBufferDataset(list(memory))
             dataloader = torch.utils.data.DataLoader(
                 dataset,
                 batch_size=BATCH_SIZE,
@@ -232,6 +244,7 @@ if __name__ == "__main__":
                   f"  policy={total_p/n:.4f}"
                   f"  value={total_v/n:.4f}")
 
+            # ── Phase 3: Checkpointing & Gating ────────────────────────────────
             if iteration % CHECKPOINT_EVERY == 0:
                 path = f"checkpoint_{iteration:04d}.pt"
                 torch.save({
@@ -242,20 +255,26 @@ if __name__ == "__main__":
                 }, path)
                 print(f"[{get_timestamp()}]           → saved {path}")
 
-                # Persistent Buffer: ensures self-play data survives restarts
+                # Persistent Buffer
                 torch.save(list(memory), BUFFER_PATH)
                 print(f"[{get_timestamp()}]           → updated {BUFFER_PATH}")
-            # ── Phase 3: Champion Gating ──────────────────────────────────────
+
             if iteration > 0 and iteration % EVAL_EVERY == 0 and best_ckpt_path:
                 print(f"[{get_timestamp()}] Evaluation against {best_ckpt_path}...")
                 eval_model = AlphaNet().to(device)
                 eval_ckpt = torch.load(best_ckpt_path, map_location=device, weights_only=True)
-                eval_model.load_state_dict(eval_ckpt['model_state_dict'])
+                eval_model.load_state_dict(eval_ckpt['model_state_dict'] if 'model_state_dict' in eval_ckpt else eval_ckpt)
                 
-                win_rate = evaluate_model(model, eval_model, device)
-                print(f"[{get_timestamp()}] Evaluation result: {win_rate*100:.1f}% win rate")
+                wins, total = evaluate_model(model, eval_model, device)
+                # B) Binomial Gating
+                # One-sided test: is the current model significant better than 50/50?
+                # We round wins to integer for binomtest; draws count as 0.5 but binomtest needs counts.
+                # For fairness in binomtest, we treat draws as half-wins.
+                res = binomtest(int(wins), total, p=0.5, alternative='greater')
+                win_rate = wins / total
+                print(f"[{get_timestamp()}] Evaluation result: {win_rate*100:.1f}% win rate (p={res.pvalue:.4f})")
                 
-                if win_rate > 0.55:
+                if res.pvalue < 0.05:
                     best_ckpt_path = "checkpoint_best.pt"
                     torch.save({
                         'iteration': iteration,
@@ -268,13 +287,10 @@ if __name__ == "__main__":
                 if device.type == "cuda":
                     torch.cuda.empty_cache()
             elif not best_ckpt_path:
-                # First iteration saves as the initial best
                 best_ckpt_path = "checkpoint_best.pt"
                 torch.save({
                     'iteration': iteration,
                     'model_state_dict': model.state_dict(),
-                    'optimizer_state_dict': optimizer.state_dict(),
-                    'scaler_state_dict': scaler.state_dict(),
                 }, best_ckpt_path)
 
         scheduler.step()

@@ -308,6 +308,11 @@ function getLowestEmptyRow(c) {
 }
 
 function playMove(r, c, player) {
+    // Spatial swoosh sound
+    if (typeof AudioEngine !== 'undefined') {
+        AudioEngine.playSwoosh();
+    }
+
     board[r][c] = player;
     const spot = document.getElementById(`spot-${r}-${c}`);
     if (player === 1) spot.classList.add('chip-1');

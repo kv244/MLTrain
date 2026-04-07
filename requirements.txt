@@ -2,12 +2,15 @@ flask
 Flask-Limiter
 gunicorn
 --extra-index-url https://download.pytorch.org/whl/cpu
-torch
 numpy
 openvino
 flake8
 networkx
 python-dotenv
-google-generativeai
+google-genumpy
+torch
+scipy
+flask
 google-cloud-aiplatform
+matplotlib
 Pillow

@@ -16,14 +16,49 @@ const AudioEngine = {
     // Synths
     prophet: null,
     prophetFilter: null,
+    noiseBuffer: null,
     
     // Scale: E Minor Pentatonic (E, G, A, B, D)
     scale: [164.81, 196.00, 220.00, 246.94, 293.66], // E3, G3, A3, B3, D4
-
+    
     init() {
         if (this.ctx) return;
         this.ctx = new (window.AudioContext || window.webkitAudioContext)();
         this.setupProphet();
+
+        // ── Pre-generate white noise for the "swoosh" ─────────────────────
+        const bufferSize = 2 * this.ctx.sampleRate;
+        this.noiseBuffer = this.ctx.createBuffer(1, bufferSize, this.ctx.sampleRate);
+        const output = this.noiseBuffer.getChannelData(0);
+        for (let i = 0; i < bufferSize; i++) {
+            output[i] = Math.random() * 2 - 1;
+        }
+    },
+
+    playSwoosh() {
+        if (!this.ctx) this.init();
+        if (this.ctx.state === 'suspended') this.ctx.resume();
+
+        const noise = this.ctx.createBufferSource();
+        const filter = this.ctx.createBiquadFilter();
+        const gain = this.ctx.createGain();
+
+        noise.buffer = this.noiseBuffer;
+
+        filter.type = 'lowpass';
+        filter.frequency.setValueAtTime(3000, this.ctx.currentTime);
+        filter.frequency.exponentialRampToValueAtTime(200, this.ctx.currentTime + 0.2);
+
+        gain.gain.setValueAtTime(0, this.ctx.currentTime);
+        gain.gain.linearRampToValueAtTime(0.3, this.ctx.currentTime + 0.01);
+        gain.gain.exponentialRampToValueAtTime(0.0001, this.ctx.currentTime + 0.25);
+
+        noise.connect(filter);
+        filter.connect(gain);
+        gain.connect(this.ctx.destination);
+
+        noise.start();
+        noise.stop(this.ctx.currentTime + 0.25);
     },
 
     setupProphet() {
