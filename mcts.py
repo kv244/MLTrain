@@ -26,9 +26,11 @@ class Connect4:
         for row in range(5, -1, -1):
             if self.board[row, col] == 0:
                 self.board[row, col] = self.current_player
+                # Store the last move for win checking
+                last_move = (row, col, self.current_player)
                 self.current_player *= -1
                 self.move_count += 1
-                return row, col
+                return last_move
         return None
 
     def get_valid_moves(self):
@@ -38,9 +40,7 @@ class Connect4:
                 valid.append(col)
         return valid
 
-    def check_win(self, row, col):
-        # Last player who moved was the previous player
-        player = self.board[row, col]
+    def check_win(self, row, col, player):
         directions = [(0, 1), (1, 0), (1, 1), (1, -1)]
         for dr, dc in directions:
             count = 1
@@ -84,12 +84,13 @@ def board_to_tensor(game: Connect4) -> torch.Tensor:
 
 class MCTSNode:
     def __init__(self, game: Connect4, parent=None):
-        self.game = game # Full game state (for terminal check/expansion)
+        self.game = game # Full game state
         self.parent = parent
         self.children = {} # move -> MCTSNode
         self.visit_count = 0
         self.total_value = 0.0
         self.prior = 0.0
+        self.terminal_value = None # None if not terminal else float
 
     @property
     def q_value(self):
@@ -99,17 +100,13 @@ class MCTSNode:
         return len(self.children) == 0
 
     def is_terminal(self):
-        # We check if this state was reached by a winning move
-        # (Technically we'd need the last (r,c) to check effectively)
-        # For simplicity, we assume expansion handles this or check valid moves
-        return not self.game.get_valid_moves()
+        return self.terminal_value is not None
 
     def select_child(self, c_puct):
         best_score = -float('inf')
         best_move = -1
         best_node = None
         
-        # sqrt of parent visits
         sqrt_parent_visits = np.sqrt(self.visit_count) if self.visit_count > 0 else 1.0
 
         for move, child in self.children.items():
@@ -127,23 +124,31 @@ class MCTSNode:
         # Mask and re-normalize policy
         sum_p = 0.0
         for move in valid_moves:
-            p = policy_probs[move]
-            sum_p += p
+            sum_p += policy_probs[move]
             
         if sum_p > 0:
             for move in valid_moves:
                 child_game = self.game.clone()
-                # We need the last move to check win
-                child_game.play(move)
+                res = child_game.play(move) # Returns (r, c, player)
                 child = MCTSNode(child_game, parent=self)
                 child.prior = policy_probs[move] / sum_p
+                
+                # Check terminal status during expansion
+                if child_game.check_win(res[0], res[1], res[2]):
+                    # Player who just moved won.
+                    # Relative to the parent's current_player (who picked the move):
+                    # If current_player (1) picked move and won, value is 1.0
+                    child.terminal_value = 1.0
+                elif not child_game.get_valid_moves():
+                    child.terminal_value = 0.0 # Draw
+                    
                 self.children[move] = child
 
     def backpropagate(self, value):
         self.visit_count += 1
         self.total_value += value
         if self.parent:
-            # Flip value perspective for the parent
+            # AlphaZero flips the value for the parent (their perspective)
             self.parent.backpropagate(-value)
 
 
@@ -154,7 +159,7 @@ def _add_dirichlet_noise(node: MCTSNode, epsilon: float = 0.25):
     if not node.children:
         return
 
-    alpha = 1.0  # High alpha for small action space (Connect 4)
+    alpha = 1.0 # Standard for Connect 4 acción space
     actions = list(node.children.keys())
     noise = np.random.dirichlet([alpha] * len(actions))
     
@@ -200,18 +205,12 @@ def run_mcts_simulations(
         # Selection
         while not node.is_leaf():
             _, node = node.select_child(c_puct)
+            if node.is_terminal(): # FIX: Handle terminal leaf in selection path
+                break
             
         # Leaf evaluation
-        if node.game.move_count > 0:
-            # We need to know where the last piece was played to check win efficiently,
-            # but for simplicity we rely on child games being terminal
-            pass
-            
-        if not node.game.get_valid_moves():
-            # Terminal or draw
-            # Note: winner is -1 relative to root if reached via game.play()
-            # This is complex. For now handle simplified expansion
-            node.backpropagate(0) # Should be refined
+        if node.is_terminal():
+            node.backpropagate(node.terminal_value)
             continue
 
         state = board_to_tensor(node.game).unsqueeze(0).to(device)
