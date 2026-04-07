@@ -7,7 +7,6 @@ openvino
 flake8
 networkx
 python-dotenv
-google-genumpy
 torch
 scipy
 flask
