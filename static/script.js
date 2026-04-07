@@ -313,10 +313,50 @@ function playMove(r, c, player) {
         AudioEngine.playSwoosh();
     }
 
+    // Shimmering stardust trail
+    createStardustTrail(c, r, player);
+
     board[r][c] = player;
     const spot = document.getElementById(`spot-${r}-${c}`);
     if (player === 1) spot.classList.add('chip-1');
     else if (player === -1) spot.classList.add('chip-2');
+}
+
+function createStardustTrail(col, endRow, player) {
+    const colEl = document.querySelector(`.column[data-col="${col}"]`);
+    if (!colEl) return;
+
+    const rect = colEl.getBoundingClientRect();
+    const startX = rect.left + rect.width / 2;
+    const startY = rect.top; // Top of the column
+    
+    // Approximate landing Y
+    const spotEl = document.getElementById(`spot-${endRow}-${col}`);
+    const endY = spotEl ? spotEl.getBoundingClientRect().top + 30 : rect.bottom;
+
+    const particleCount = 12;
+    const duration = 400; // ms to fall
+
+    for (let i = 0; i < particleCount; i++) {
+        setTimeout(() => {
+            const p = document.createElement('div');
+            p.className = 'stardust-particle';
+            
+            // Progression 0 to 1
+            const progress = i / particleCount;
+            const currentY = startY + (endY - startY) * progress;
+            
+            p.style.left = `${startX + (Math.random() - 0.5) * 30}px`;
+            p.style.top = `${currentY}px`;
+            
+            // Random drift
+            p.style.setProperty('--dx', `${(Math.random() - 0.5) * 40}px`);
+            p.style.setProperty('--dy', `${(Math.random() - 0.5) * 40}px`);
+            
+            document.body.appendChild(p);
+            setTimeout(() => p.remove(), 1000);
+        }, (i * (duration / particleCount)));
+    }
 }
 
 // Step 4: Hint function

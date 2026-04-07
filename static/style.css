@@ -652,3 +652,27 @@ For now, two prominent corners are very Manga-style. */
 .btn-icon .icon {
     font-size: 1.1rem;
 }
+
+/* Stardust Trail Particle System */
+.stardust-particle {
+    position: absolute;
+    width: 3px;
+    height: 3px;
+    background: white;
+    border-radius: 50%;
+    pointer-events: none;
+    z-index: 100;
+    box-shadow: 0 0 5px var(--ui-glow), 0 0 10px white;
+    animation: stardust-fade 0.6s ease-out forwards;
+}
+
+@keyframes stardust-fade {
+    0% {
+        transform: translate(0, 0) scale(1);
+        opacity: 0.8;
+    }
+    100% {
+        transform: translate(var(--dx), var(--dy)) scale(0);
+        opacity: 0;
+    }
+}
