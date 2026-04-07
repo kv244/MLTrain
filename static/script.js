@@ -326,34 +326,36 @@ function createStardustTrail(col, endRow, player) {
     const colEl = document.querySelector(`.column[data-col="${col}"]`);
     if (!colEl) return;
 
-    const rect = colEl.getBoundingClientRect();
-    const startX = rect.left + rect.width / 2;
-    const startY = rect.top; // Top of the column
-    
-    // Approximate landing Y
-    const spotEl = document.getElementById(`spot-${endRow}-${col}`);
-    const endY = spotEl ? spotEl.getBoundingClientRect().top + 30 : rect.bottom;
+    // We append to colEl, so (0,0) is the top-left of the column.
+    // X is always 50% (center of column).
+    const startY = 0;
+    const endY = (endRow / ROWS) * 100; // Percentage based for responsiveness
 
     const particleCount = 12;
-    const duration = 400; // ms to fall
+    const duration = 500;
 
     for (let i = 0; i < particleCount; i++) {
         setTimeout(() => {
             const p = document.createElement('div');
             p.className = 'stardust-particle';
+            // Set base positioning (centered)
+            p.style.cssText = "left: 50%; top: 0;"; // This might still be blocked, so we'll use animate instead
             
-            // Progression 0 to 1
+            colEl.appendChild(p);
+            
             const progress = i / particleCount;
-            const currentY = startY + (endY - startY) * progress;
-            
-            p.style.left = `${startX + (Math.random() - 0.5) * 30}px`;
-            p.style.top = `${currentY}px`;
-            
-            // Random drift
-            p.style.setProperty('--dx', `${(Math.random() - 0.5) * 40}px`);
-            p.style.setProperty('--dy', `${(Math.random() - 0.5) * 40}px`);
-            
-            document.body.appendChild(p);
+            const currentY = (endY * progress);
+
+            // Use Web Animations API (CSP-safe if not using string styles)
+            p.animate([
+                { transform: `translate(-50%, ${currentY}px) scale(1)`, opacity: 0.8 },
+                { transform: `translate(calc(-50% + ${Math.random()*40-20}px), ${currentY + 20}px) scale(0)`, opacity: 0 }
+            ], {
+                duration: 600,
+                easing: 'ease-out',
+                fill: 'forwards'
+            });
+
             setTimeout(() => p.remove(), 1000);
         }, (i * (duration / particleCount)));
     }

@@ -175,7 +175,7 @@ def run_mcts_simulations(
     model: torch.nn.Module, 
     device: torch.device, 
     num_sims: int = 400, 
-    c_puct: float = 1.0,
+    c_puct: float = 1.41,
     temperature: float = 1.0, 
     add_dirichlet_noise: bool = True, 
     return_root: bool = False,
