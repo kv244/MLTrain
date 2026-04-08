@@ -59,18 +59,6 @@ class Connect4:
             if count >= 4: return True
         return False
 
-    def get_winning_move(self, player):
-        """Returns the column index of a move that wins for the given player."""
-        valid_moves = self.get_valid_moves()
-        for move in valid_moves:
-            temp_game = self.clone()
-            r, c = temp_game.play(move)
-            if temp_game.board[r][c] == player: # The player just moved
-                # Check win for the piece JUST PLACED
-                if temp_game.check_win(r, c):
-                    return move
-        return None
-
     def clone(self):
         new_game = Connect4()
         new_game.board = self.board.copy()
@@ -124,8 +112,10 @@ class MCTSNode:
         sqrt_parent_visits = np.sqrt(self.visit_count) if self.visit_count > 0 else 1.0
 
         for move, child in self.children.items():
-            # AlphaZero PUCT formula: Q + c_puct * P * (sqrt(N_parent) / (1 + N_child))
-            score = child.q_value + c_puct * child.prior * (sqrt_parent_visits / (1 + child.visit_count))
+            # Standard AlphaZero PUCT: -Q + U
+            # (where Q is child's value from child's perspective, so -Q is parent's perspective)
+            # OR as in our current backprop, if child.q_value is child's perspective, parent needs -child.q_value.
+            score = -child.q_value + c_puct * child.prior * (sqrt_parent_visits / (1 + child.visit_count))
             if score > best_score:
                 best_score = score
                 best_move = move
@@ -194,24 +184,6 @@ def run_mcts_simulations(
     epsilon: float = 0.25,
 ) -> np.ndarray:
     """Runs N simulations from the current game state and returns move probabilities."""
-    # ── TACTICAL OVERRIDE ──
-    # 1. Immediate Win
-    win_move = game.get_winning_move(game.current_player)
-    if win_move is not None:
-        if return_root: return None
-        probs = np.zeros(7, dtype=np.float32)
-        probs[win_move] = 1.0
-        return probs
-
-    # 2. Must Block (Opponent can win)
-    opponent = -game.current_player
-    block_move = game.get_winning_move(opponent)
-    if block_move is not None:
-        if return_root: return None
-        probs = np.zeros(7, dtype=np.float32)
-        probs[block_move] = 1.0
-        return probs
-
     root = MCTSNode(game.clone())
     
     # 1. Expand the root with a network call
@@ -250,6 +222,24 @@ def run_mcts_simulations(
             
         node.expand(F.softmax(policy_logits, dim=1).squeeze().cpu().numpy())
         node.backpropagate(value.float().item())
+
+    # ── TACTICAL OVERRIDE ──
+    # 1. Immediate Win
+    win_move = game.get_winning_move(game.current_player)
+    if win_move is not None:
+        if return_root: return None
+        probs = np.zeros(7, dtype=np.float32)
+        probs[win_move] = 1.0
+        return probs
+
+    # 2. Must Block (Opponent can win)
+    opponent = -game.current_player
+    block_move = game.get_winning_move(opponent)
+    if block_move is not None:
+        if return_root: return None
+        probs = np.zeros(7, dtype=np.float32)
+        probs[block_move] = 1.0
+        return probs
 
     # 5. Result Extraction
     visits = np.zeros(7, dtype=np.float64)
