@@ -232,29 +232,32 @@ def get_move():
             add_dirichlet_noise=False,
             return_root=True
         )
-        # Calculate move probabilities from visits
-        probs = [0] * 7
-        candidates = []
-        for move, child in root.children.items():
-            v_count = child.visit_count
-            q_val = child.total_value / v_count if v_count > 0 else 0
-            probs[move] = v_count
-            candidates.append((move, v_count, q_val))
-        
-        # Sort and log top 3 for debugging
-        candidates.sort(key=lambda x: x[1], reverse=True)
-        log_msg = f"AI thinking: " + ", ".join([f"Col {m}(V:{v}, Q:{q:.2f})" for m,v,q in candidates[:3]])
-        print(log_msg)
-        
-        root_val = root.q_value
-        # If position is contested/complex, boost the budget
-        if abs(root_val) < 0.4:
-            simulations = min(5000, int(simulations * 1.5))
-            print(f"[Adaptive] Contested position (q={root_val:.2f}). Boosting sims to {simulations}")
-        # If position is nearly decided, reduce the budget
-        elif abs(root_val) > 0.85:
-            simulations = max(50, int(simulations * 0.5))
-            print(f"[Adaptive] Decided position (q={root_val:.2f}). Reducing sims to {simulations}")
+        # Calculate move probabilities from visits if root is available
+        if root is not None:
+            probs = [0] * 7
+            candidates = []
+            for move, child in root.children.items():
+                v_count = child.visit_count
+                q_val = child.total_value / v_count if v_count > 0 else 0
+                probs[move] = v_count
+                candidates.append((move, v_count, q_val))
+            
+            # Sort and log top 3 for debugging
+            candidates.sort(key=lambda x: x[1], reverse=True)
+            log_msg = f"AI thinking: " + ", ".join([f"Col {m}(V:{v}, Q:{q:.2f})" for m,v,q in candidates[:3]])
+            print(log_msg)
+            
+            root_val = root.q_value
+            # If position is contested/complex, boost the budget
+            if abs(root_val) < 0.4:
+                simulations = min(5000, int(simulations * 1.5))
+                print(f"[Adaptive] Contested position (q={root_val:.2f}). Boosting sims to {simulations}")
+            # If position is nearly decided, reduce the budget
+            elif abs(root_val) > 0.85:
+                simulations = max(50, int(simulations * 0.5))
+                print(f"[Adaptive] Decided position (q={root_val:.2f}). Reducing sims to {simulations}")
+        else:
+            print("[Adaptive] Tactical Short-Circuit detected. Bypassing simulation boost.")
 
     print(f"Evaluating board using {checkpoint_name} for player {current_player} (sims={simulations})...")
 
