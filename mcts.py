@@ -39,25 +39,27 @@ class Connect4:
         return valid
 
     def check_win(self, row, col):
-        # Last player who moved was the previous player
+        """Returns the list of winning cell coordinates [(r,c), ...] or an empty list."""
         player = self.board[row, col]
-        if player == 0: return False
+        if player == 0: return []
         
         directions = [(0, 1), (1, 0), (1, 1), (1, -1)]
         for dr, dc in directions:
-            count = 1
+            cells = [(row, col)]
             # Forward
             r, c = row + dr, col + dc
             while 0 <= r < 6 and 0 <= c < 7 and self.board[r, c] == player:
-                count += 1
+                cells.append((r, c))
                 r, c = r + dr, c + dc
             # Backward
             r, c = row - dr, col - dc
             while 0 <= r < 6 and 0 <= c < 7 and self.board[r, c] == player:
-                count += 1
+                cells.append((r, c))
                 r, c = r - dr, c - dc
-            if count >= 4: return True
-        return False
+            
+            if len(cells) >= 4:
+                return cells
+        return []
 
     def get_winning_move(self, player):
         """Returns the column index of a move that wins for the given player."""
@@ -150,7 +152,8 @@ class MCTSNode:
                 child.prior = policy_probs[move] / sum_p
                 
                 # Check terminal status during expansion
-                if child_game.check_win(r, c):
+                win_cells = child_game.check_win(r, c)
+                if win_cells:
                     # Previous player (parent_player) won.
                     # Value from perspective of current player (child_game.current_player) is -1.0.
                     child.terminal_value = -1.0
