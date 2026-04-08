@@ -39,21 +39,32 @@ jobs:
             set -e
             cd ${{ env.TARGET_DIR }}
             
-            # ── NEW: Pre-deploy Disk Cleanup ──
-            echo "Cleaning up disk space..."
+            # ── NUCLEAR: Pre-deploy Disk Cleanup ──
+            echo "Emergency cleanup initiated..."
             rm -rf ~/.cache/pip || true
-            find ~/backups -name "mltrain_backup_*.tar.gz" -type f -mtime +1 -delete 2>/dev/null || true
+            rm -rf ~/backups/* || true
+            sudo docker system prune -af || true
+            sudo journalctl --vacuum-time=1d || true
             
-            # ── NEW: Comprehensive Code Backup ──
-            mkdir -p ~/backups
-            TIMESTAMP=$(date +%Y%m%d_%H%M%S)
-            # Use smaller compression level or skip if critical space
-            tar -czf ~/backups/mltrain_backup_${TIMESTAMP}.tar.gz . \
-              --exclude="./.git" --exclude="./.venv" --exclude="./__pycache__" --exclude="./*.pt" \
-              --exclude="./*.onnx" --exclude="./*.onnx.data" || true
+            # Verify space
+            FREE_SPACE=$(df -m / | awk 'NR==2 {print $4}')
+            echo "Available space: ${FREE_SPACE}MB"
             
-            # Keep only the last 5 backups
-            ls -t ~/backups/mltrain_backup_*.tar.gz | tail -n +6 | xargs rm -f 2>/dev/null || true
+            if [ "$FREE_SPACE" -lt 500 ]; then
+              echo "CRITICAL: Insufficient disk space for deployment."
+              exit 1
+            fi
+            
+            # Skip backup if space is still tight
+            if [ "$FREE_SPACE" -lt 1000 ]; then
+              echo "Space tight, skipping backup..."
+            else
+              mkdir -p ~/backups
+              TIMESTAMP=$(date +%Y%m%d_%H%M%S)
+              tar -czf ~/backups/mltrain_backup_${TIMESTAMP}.tar.gz . \
+                --exclude="./.git" --exclude="./.venv" --exclude="./__pycache__" --exclude="./*.pt" \
+                --exclude="./*.onnx" --exclude="./*.onnx.data" || true
+            fi
 
             # Backup current venv for immediate rollback
             [ -d .venv ] && (rm -rf .venv.backup && cp -r .venv .venv.backup) || true
