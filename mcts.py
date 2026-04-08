@@ -66,11 +66,12 @@ class Connect4:
         valid_moves = self.get_valid_moves()
         for move in valid_moves:
             temp_game = self.clone()
+            temp_game.current_player = player   # Force player ID for simulation
             r, c = temp_game.play(move)
-            if temp_game.board[r][c] == player: # The player just moved
-                # Check win for the piece JUST PLACED
-                if temp_game.check_win(r, c):
-                    return move
+            # Check win for the piece JUST PLACED
+            win_cells = temp_game.check_win(r, c)
+            if win_cells:
+                return move
         return None
 
     def clone(self):
@@ -203,19 +204,17 @@ def run_mcts_simulations(
     # 1. Immediate Win
     win_move = game.get_winning_move(game.current_player)
     if win_move is not None:
-        if return_root: return None
         probs = np.zeros(7, dtype=np.float32)
         probs[win_move] = 1.0
-        return probs
+        return (probs, None) if return_root else probs
 
     # 2. Must Block (Opponent can win)
     opponent = -game.current_player
     block_move = game.get_winning_move(opponent)
     if block_move is not None:
-        if return_root: return None
         probs = np.zeros(7, dtype=np.float32)
         probs[block_move] = 1.0
-        return probs
+        return (probs, None) if return_root else probs
 
     root = MCTSNode(game.clone())
     

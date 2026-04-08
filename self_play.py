@@ -61,7 +61,7 @@ def run_self_play_game(
         )
         
         # Save state: (normalized_board, mcts_probs, current_player)
-        states.append((game.board.copy(), probs, game.current_player))
+        states.append((board_to_tensor(game), probs, game.current_player))
         
         # Sample move from the MCTS probability distribution
         move = np.random.choice(7, p=probs)
@@ -134,6 +134,19 @@ def run_batched_self_play(
         for i in active:
             temperature = 1.0 if move_counts[i] < temp_threshold else 0.01
             probs = _visits_to_probs(roots[i], temperature)
+
+            # Tactical override: immediate win or forced block
+            win_move = games[i].get_winning_move(games[i].current_player)
+            if win_move is not None:
+                probs = np.zeros(7, dtype=np.float64)
+                probs[win_move] = 1.0
+            else:
+                opp = -games[i].current_player
+                block_move = games[i].get_winning_move(opp)
+                if block_move is not None:
+                    probs = np.zeros(7, dtype=np.float64)
+                    probs[block_move] = 1.0
+
             histories[i].append((board_to_tensor(games[i]), probs, games[i].current_player))
             move = int(np.random.choice(7, p=probs))
             r, c = games[i].play(move)
