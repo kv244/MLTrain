@@ -82,7 +82,7 @@ else:
     best_ckpt_path = None
 import numpy as np
 
-# LR schedule: drop by 10× at iteration 100, again at 150.
+# LR schedule: drop by 10× at iteration 700, again at 1000.
 # Keeps updates aggressive early, then stabilises loss in late training.
 scheduler = torch.optim.lr_scheduler.MultiStepLR(
     optimizer, milestones=[700, 1000], gamma=0.1,
@@ -295,15 +295,6 @@ if __name__ == "__main__":
                     'model_state_dict': model.state_dict(),
                 }, best_ckpt_path)
 
-            if iteration % CHECKPOINT_EVERY == 0:
-                ckpt_path = f"checkpoint_{iteration:04d}.pt"
-                torch.save({
-                    'iteration': iteration,
-                    'model_state_dict': model.state_dict(),
-                    'optimizer_state_dict': optimizer.state_dict(),
-                    'scaler_state_dict': scaler.state_dict(),
-                }, ckpt_path)
-                print(f"[{get_timestamp()}]           → saved {ckpt_path}")
 
             scheduler.step()
 

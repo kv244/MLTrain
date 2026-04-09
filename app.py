@@ -1,5 +1,6 @@
 import os
 import glob
+import re
 import time
 import csv
 import torch
@@ -362,6 +363,14 @@ def assess_move():
     game.board = board_arr
     game.current_player = current_player
 
+    # FIX 8: Board full guard
+    if not game.get_valid_moves():
+        return jsonify({"error": "Board is full — no moves available"}), 400
+
+    # FIX 7: Move playable guard
+    if move not in game.get_valid_moves():
+        return jsonify({"error": "Column is full or invalid"}), 400
+
     # Get AI's opinion on this state
     mcts_probs = run_mcts_simulations(
         game, model, device,
@@ -402,7 +411,6 @@ def assess_move():
     quote = "Analysis complete."
     if gemini_model:
         try:
-            category = score_desc.get(score, "Standard")
             prompt = (
                 f"You are a sophisticated AI commentator for a cyberpunk-themed Connect 4 game. "
                 f"A player just made a move that was evaluated as {score}/5 stars. "
@@ -411,11 +419,13 @@ def assess_move():
                 f"QUOTE: [short atmospheric robotic quote, max 15 words]\n"
                 f"Use cyberpunk terminology. Output ONLY the requested format."
             )
-            response = gemini_model.generate_content(prompt)
+            response = gemini_model.generate_content(
+                prompt,
+                request_options={"timeout": 8}
+            )
             responseText = response.text
             
             # More robust parsing using regex or keyword search
-            import re
             label_match = re.search(r"LABEL:\s*(.*)", responseText, re.IGNORECASE)
             quote_match = re.search(r"QUOTE:\s*(.*)", responseText, re.IGNORECASE)
             
@@ -436,8 +446,6 @@ def assess_move():
             }
             f = fallbacks.get(score, fallbacks[3])
             comment, quote = f["label"], f["quote"]
-    else:
-        quote = "Analysis complete."
 
     # ── Step 1: Detect Winning Cells ──
     winning_cells = []
