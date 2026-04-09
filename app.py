@@ -17,8 +17,8 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-VERSION = "1.5.0"
-LAST_COMMIT = "2026-04-09 14:15 UTC"
+VERSION = "1.6.0"
+LAST_COMMIT = "2026-04-09 14:38 UTC"
 
 from mcts import Connect4, run_mcts_simulations
 import background_manager # NEW: Dynamic Environment manager
@@ -140,7 +140,7 @@ def get_model(checkpoint_path):
 
 @app.route("/")
 def index():
-    return render_template("index.html")
+    return render_template("index.html", version=VERSION)
 
 @app.route("/api/info")
 def get_info():

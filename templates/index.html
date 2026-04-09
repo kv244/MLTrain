@@ -29,6 +29,9 @@
         <header class="game-header">
             <h1>Connect 4 AI</h1>
             <p class="subtitle">Powered by MCTS & AlphaZero</p>
+            {% if version %}
+            <div class="version-badge">v{{ version }}</div>
+            {% endif %}
         </header>
 
         <!-- Sidebar / Top controls -->

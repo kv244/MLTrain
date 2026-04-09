@@ -76,6 +76,7 @@ body::after {
 .game-header {
     text-align: center;
     margin-bottom: 2rem;
+    position: relative; /* Fixed: Required for version badge */
 }
 
 .game-header h1 {
@@ -90,6 +91,28 @@ body::after {
 .subtitle {
     font-size: 0.9rem;
     color: #8b949e;
+}
+
+.version-badge {
+    position: absolute;
+    top: 5px;
+    right: 0;
+    font-size: 0.7rem;
+    font-weight: bold;
+    color: var(--neon-cyan);
+    border: 1px solid var(--neon-cyan);
+    padding: 2px 8px;
+    border-radius: 4px;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    opacity: 0.6;
+    transition: all 0.3s ease;
+}
+
+.version-badge:hover {
+    opacity: 1;
+    box-shadow: 0 0 10px var(--neon-cyan);
+    background: rgba(0, 229, 255, 0.1);
 }
 
 /* Control Panel */

@@ -6,6 +6,7 @@ let boardHistory = []; // Step 5: Undo stack
 let currentPlayer = 1; // 1 = Human, -1 = AI (default if AI plays first)
 let humanPlayer = 1;
 let gameOver = false;
+let moveCount = 0; // NEW: Track total moves
 
 // LocalStorage Persistence
 let stats = JSON.parse(localStorage.getItem("c4_stats")) || { games: 0, player: 0, ai: 0 };
@@ -125,6 +126,7 @@ function startGame(human_role) {
     humanPlayer = human_role;
     currentPlayer = 1; // 1 always goes first in Connect4
     gameOver = false;
+    moveCount = 0;
     
     initBoard();
     clearAssessment();
@@ -328,6 +330,7 @@ function playMove(r, c, player) {
     createStardustTrail(c, r, player);
 
     board[r][c] = player;
+    moveCount++; // Increment on every play
     
     // Clear previous latest piece
     document.querySelectorAll('.latest-piece').forEach(el => el.classList.remove('latest-piece'));
@@ -431,6 +434,7 @@ function undoMove() {
     const previousState = boardHistory.pop();
     
     board = previousState;
+    moveCount = Math.max(0, moveCount - 2); // Undo both player and AI move
     renderBoard();
     clearAssessment();
     hideHeatmap();
@@ -589,7 +593,7 @@ function endGame(message, winningLine = null) {
     _board.classList.add('disabled');
     updateActionButtons();
     
-    _badge.innerText = message;
+    _badge.innerText = `${message} in ${moveCount} moves`;
     _badge.className = "player-turn-badge"; 
     
     let winnerId = "draw";
