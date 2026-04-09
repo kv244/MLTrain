@@ -614,6 +614,13 @@ function endGame(message, winningLine = null) {
         });
 
         WinEffects.triggerRandom(winnerId, winningLine);
+        
+        // Auto-revert effects after 5 seconds but keep the pieces
+        setTimeout(() => {
+            WinEffects.reset();
+            document.querySelectorAll('.winning-spot').forEach(el => el.classList.remove('winning-spot'));
+        }, 5000);
+
         setTimeout(() => {
             _btnReset.classList.remove('hidden');
         }, 1500);
@@ -649,9 +656,9 @@ async function initWelcomeMessage() {
     toast.classList.remove('hidden');
 
     try {
-        // Fetch Geo-IP info (Country)
-        // ipapi.co is free for development usage without key
-        const response = await fetch('https://ipapi.co/json/');
+        // Fetch Geo-IP info (Country) using a more robust provider
+        // geolocation-db.com is more reliable for client-side lookups
+        const response = await fetch('https://geolocation-db.com/json/');
         if (!response.ok) throw new Error("Geo-IP lookup failed");
         
         const data = await response.json();
