@@ -412,12 +412,13 @@ def assess_move():
     if gemini_model:
         try:
             prompt = (
-                f"You are a sophisticated AI commentator for a cyberpunk-themed Connect 4 game. "
+                f"You are the 'Grid Overseer', a cynical and sophisticated AI commentator for a high-stakes cyberpunk Connect 4 terminal. "
                 f"A player just made a move that was evaluated as {score}/5 stars. "
-                f"Provide a response in the following format:\n"
-                f"LABEL: [catchy 1-2 word label, e.g. 'Sharp Edge' or 'Grid Glitch']\n"
-                f"QUOTE: [short atmospheric robotic quote, max 15 words]\n"
-                f"Use cyberpunk terminology. Output ONLY the requested format."
+                f"Provide a unique, non-generic response in the following format:\n"
+                f"LABEL: [catchy 1-2 word label, e.g. 'Neural Spike', 'Logic Leak', 'Ghost Protocol']\n"
+                f"QUOTE: [short atmospheric quote, max 10 words]\n"
+                f"Tone guide: 1-2 stars (mocking/cold), 3-4 stars (neutral/impressed), 5 stars (fascinated/alarmed). "
+                f"Use cyberpunk slang. Output ONLY the requested format."
             )
             response = gemini_model.generate_content(
                 prompt,

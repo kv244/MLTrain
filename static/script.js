@@ -347,35 +347,34 @@ function createStardustTrail(col, endRow, player) {
     const colEl = document.querySelector(`.column[data-col="${col}"]`);
     if (!colEl) return;
 
+    // Ensure relative positioning for tracking
+    colEl.style.position = 'relative';
+
     const colHeight = colEl.clientHeight;
-    // index 0 is top, index ROWS-1 is bottom. 
-    // center of row R is at (R + 0.5) / ROWS * height
     const endY = ((endRow + 0.5) / ROWS) * colHeight;
 
-    const particleCount = 12;
-    const duration = 500;
+    const particleCount = 10;
+    const duration = 400;
 
     for (let i = 0; i < particleCount; i++) {
         setTimeout(() => {
             const p = document.createElement('div');
             p.className = 'stardust-particle';
-            p.style.cssText = "left: 50%; top: 0;";
+            p.style.cssText = `left: 50%; top: 0;`;
             
             colEl.appendChild(p);
             
-            const progress = i / particleCount;
-            const currentY = (endY * progress);
-
             p.animate([
-                { transform: `translate(-50%, ${currentY}px) scale(1)`, opacity: 0.8 },
-                { transform: `translate(calc(-50% + ${Math.random()*40-20}px), ${currentY + 20}px) scale(0)`, opacity: 0 }
+                { transform: 'translate(-50%, 0) scale(1)', opacity: 0.8 },
+                { transform: `translate(-50%, ${endY}px) scale(1)`, opacity: 0.6, offset: 0.7 },
+                { transform: `translate(calc(-50% + ${Math.random()*40-20}px), ${endY + 20}px) scale(0)`, opacity: 0 }
             ], {
                 duration: 600,
-                easing: 'ease-out',
+                easing: 'cubic-bezier(0.25, 0.46, 0.45, 0.94)',
                 fill: 'forwards'
             });
 
-            setTimeout(() => p.remove(), 1000);
+            setTimeout(() => p.remove(), 800);
         }, (i * (duration / particleCount)));
     }
 }

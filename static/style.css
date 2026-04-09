@@ -5,17 +5,21 @@
     --border-color: #1a1e23;
     --text-color: #c9d1d9;
     --text-heading: #f0f6fc;
-    --primary-color: #00e5ff; /* Neon Cyan */
+    --primary-color: #00e5ff;
+    /* Neon Cyan */
     --primary-hover: #33ebff;
-    --accent-color: #ff00ff; /* Neon Magenta */
-    
+    --accent-color: #ff00ff;
+    /* Neon Magenta */
+
     /* Neon Manga specific */
     --neon-cyan: #00e5ff;
     --neon-magenta: #ff00ff;
     --neon-lime: #39ff14;
     --board-bg: rgba(5, 5, 20, 0.6);
-    --player-1: #ff2d55; /* Electric Pink/Red */
-    --player-2: #ffe700; /* Electric Yellow/Gold */
+    --player-1: #ff2d55;
+    /* Electric Pink/Red */
+    --player-2: #ffe700;
+    /* Electric Yellow/Gold */
     --spot-empty: #0a0a1a;
     --grid-line: rgba(0, 229, 255, 0.1);
     --ui-glow: var(--neon-cyan);
@@ -29,9 +33,9 @@
 }
 
 body {
-    background: 
-    linear-gradient(rgba(5, 5, 20, 0.6), rgba(5, 5, 20, 0.6)),
-    url('/static/cyberpunk_bg.png');
+    background:
+        linear-gradient(rgba(5, 5, 20, 0.6), rgba(5, 5, 20, 0.6)),
+        url('/static/cyberpunk_bg.png');
     background-size: cover;
     background-position: center;
     background-attachment: fixed;
@@ -48,7 +52,10 @@ body {
 body::after {
     content: '';
     position: fixed;
-    top: 0; left: 0; width: 100%; height: 100%;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
     background: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.15) 50%), linear-gradient(90deg, rgba(255, 0, 0, 0.03), rgba(0, 255, 0, 0.01), rgba(0, 0, 255, 0.03));
     background-size: 100% 3px, 3px 100%;
     pointer-events: none;
@@ -69,14 +76,18 @@ body::after {
 }
 
 @keyframes ambient-pulse {
-    from { box-shadow: 0 0 15px var(--ui-glow), inset 0 0 8px var(--ui-glow); }
-    to { box-shadow: 0 0 35px var(--ui-glow), inset 0 0 15px var(--ui-glow); }
+    from {
+        box-shadow: 0 0 15px var(--ui-glow), inset 0 0 8px var(--ui-glow);
+    }
+
+    to {
+        box-shadow: 0 0 35px var(--ui-glow), inset 0 0 15px var(--ui-glow);
+    }
 }
 
 .game-header {
     text-align: center;
     margin-bottom: 2rem;
-    position: relative; /* Fixed: Required for version badge */
 }
 
 .game-header h1 {
@@ -91,28 +102,6 @@ body::after {
 .subtitle {
     font-size: 0.9rem;
     color: #8b949e;
-}
-
-.version-badge {
-    position: absolute;
-    top: 5px;
-    right: 0;
-    font-size: 0.7rem;
-    font-weight: bold;
-    color: var(--neon-cyan);
-    border: 1px solid var(--neon-cyan);
-    padding: 2px 8px;
-    border-radius: 4px;
-    text-transform: uppercase;
-    letter-spacing: 1px;
-    opacity: 0.6;
-    transition: all 0.3s ease;
-}
-
-.version-badge:hover {
-    opacity: 1;
-    box-shadow: 0 0 10px var(--neon-cyan);
-    background: rgba(0, 229, 255, 0.1);
 }
 
 /* Control Panel */
@@ -183,13 +172,21 @@ input[type=range] {
     background-color: var(--player-1);
     color: white;
 }
-.primary-btn:hover { background-color: #ff6b81; transform: translateY(-2px); }
+
+.primary-btn:hover {
+    background-color: #ff6b81;
+    transform: translateY(-2px);
+}
 
 .secondary-btn {
     background-color: var(--player-2);
     color: #333;
 }
-.secondary-btn:hover { background-color: #fffa65; transform: translateY(-2px); }
+
+.secondary-btn:hover {
+    background-color: #fffa65;
+    transform: translateY(-2px);
+}
 
 /* Stats Panel Grid Layout */
 .stats-panel {
@@ -238,7 +235,11 @@ input[type=range] {
 .stat-value.highlight {
     color: var(--accent-color);
 }
-.hidden { display: none !important; }
+
+.hidden {
+    display: none !important;
+}
+
 .disabled {
     pointer-events: none;
     cursor: not-allowed;
@@ -250,7 +251,8 @@ input[type=range] {
     flex-direction: column;
     align-items: center;
     gap: 1.5rem;
-    position: relative; /* Ensure absolute children are pinned here */
+    position: relative;
+    /* Ensure absolute children are pinned here */
 }
 
 .status-bar {
@@ -267,14 +269,37 @@ input[type=range] {
     transition: background-color 0.3s;
 }
 
-.turn-p1 { background-color: var(--player-1); color: white; }
-.turn-p2 { background-color: var(--player-2); color: #333; }
-.turn-ai { background-color: var(--accent-color); color: white; animation: pulse 1.5s infinite; }
+.turn-p1 {
+    background-color: var(--player-1);
+    color: white;
+}
+
+.turn-p2 {
+    background-color: var(--player-2);
+    color: #333;
+}
+
+.turn-ai {
+    background-color: var(--accent-color);
+    color: white;
+    animation: pulse 1.5s infinite;
+}
 
 @keyframes pulse {
-    0% { transform: scale(1); opacity: 1; }
-    50% { transform: scale(1.05); opacity: 0.8; }
-    100% { transform: scale(1); opacity: 1; }
+    0% {
+        transform: scale(1);
+        opacity: 1;
+    }
+
+    50% {
+        transform: scale(1.05);
+        opacity: 0.8;
+    }
+
+    100% {
+        transform: scale(1);
+        opacity: 1;
+    }
 }
 
 /* Connect 4 Board Grid */
@@ -286,15 +311,16 @@ input[type=range] {
     border-radius: 12px;
     position: relative;
     border: 2px solid var(--neon-cyan);
-    box-shadow: 
-    0 0 15px rgba(0, 229, 255, 0.3),
-    inset 0 0 10px rgba(0, 229, 255, 0.2);
+    box-shadow:
+        0 0 15px rgba(0, 229, 255, 0.3),
+        inset 0 0 10px rgba(0, 229, 255, 0.2);
     backdrop-filter: blur(12px);
     transition: box-shadow 0.5s ease;
 }
 
 /* Flashing Corners / Tactical Brackets */
-.connect4-board::before, .connect4-board::after {
+.connect4-board::before,
+.connect4-board::after {
     content: '';
     position: absolute;
     width: 60px;
@@ -305,32 +331,47 @@ input[type=range] {
 }
 
 .connect4-board::before {
-    top: -10px; left: -10px;
-    border-right: none; border-bottom: none;
+    top: -10px;
+    left: -10px;
+    border-right: none;
+    border-bottom: none;
 }
 
 .connect4-board::after {
-    bottom: -10px; right: -10px;
-    border-left: none; border-top: none;
+    bottom: -10px;
+    right: -10px;
+    border-left: none;
+    border-top: none;
 }
 
 /* More corners via internal pseudo-elements isn't possible, so we simulate with shadows on these or nested divs. 
 For now, two prominent corners are very Manga-style. */
 
 @keyframes cornerFlash {
-    0% { opacity: 0.3; filter: drop-shadow(0 0 2px var(--neon-magenta)); transform: scale(0.98); }
-    100% { opacity: 1; filter: drop-shadow(0 0 10px var(--neon-magenta)); transform: scale(1.02); }
+    0% {
+        opacity: 0.3;
+        filter: drop-shadow(0 0 2px var(--neon-magenta));
+        transform: scale(0.98);
+    }
+
+    100% {
+        opacity: 1;
+        filter: drop-shadow(0 0 10px var(--neon-magenta));
+        transform: scale(1.02);
+    }
 }
 
 /* Columns for hover effects */
 .column {
     display: flex;
-    flex-direction: column-reverse; /* Bottom up indexing */
+    flex-direction: column-reverse;
+    /* Bottom up indexing */
     gap: 10px;
     cursor: pointer;
     border-radius: 30px;
     transition: background-color 0.2s;
-    position: relative; /* Fixed: Required for absolute particles */
+    position: relative;
+    /* Fixed: Required for absolute particles */
 }
 
 .column:hover {
@@ -343,27 +384,29 @@ For now, two prominent corners are very Manga-style. */
     border-radius: 50%;
     background-color: var(--spot-empty);
     /* Manga Halftone / Tech pattern background */
-    background-image: 
-    radial-gradient(rgba(0, 229, 255, 0.05) 15%, transparent 20%),
-    radial-gradient(rgba(255, 0, 255, 0.05) 15%, transparent 20%);
+    background-image:
+        radial-gradient(rgba(0, 229, 255, 0.05) 15%, transparent 20%),
+        radial-gradient(rgba(255, 0, 255, 0.05) 15%, transparent 20%);
     background-position: 0 0, 4px 4px;
     background-size: 8px 8px;
-    
-    box-shadow: 
-    inset 0 10px 20px rgba(0, 0, 0, 0.9),
-    0 0 0 1px rgba(0, 229, 255, 0.15);
+
+    box-shadow:
+        inset 0 10px 20px rgba(0, 0, 0, 0.9),
+        0 0 0 1px rgba(0, 229, 255, 0.15);
     transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
     position: relative;
     overflow: hidden;
 }
 
 /* Premium Chip Styling */
-.chip-1, .chip-2 {
+.chip-1,
+.chip-2 {
     position: relative;
 }
 
 /* Common "Glare/Reflection" layer */
-.chip-1::after, .chip-2::after {
+.chip-1::after,
+.chip-2::after {
     content: '';
     position: absolute;
     top: 5%;
@@ -376,7 +419,8 @@ For now, two prominent corners are very Manga-style. */
 }
 
 /* Subtle concentric rings for physical texture */
-.chip-1::before, .chip-2::before {
+.chip-1::before,
+.chip-2::before {
     content: '';
     position: absolute;
     top: 15%;
@@ -385,26 +429,26 @@ For now, two prominent corners are very Manga-style. */
     bottom: 15%;
     border-radius: 50%;
     border: 1px solid rgba(0, 0, 0, 0.1);
-    box-shadow: inset 0 0 5px rgba(0,0,0,0.1);
+    box-shadow: inset 0 0 5px rgba(0, 0, 0, 0.1);
     pointer-events: none;
 }
 
 .chip-1 {
     background: radial-gradient(circle at 35% 35%, #ff2d55 0%, #ff004c 45%, #800021 100%);
-    box-shadow: 
-    inset 0 -4px 6px rgba(0, 0, 0, 0.5),
-    inset 0 4px 6px rgba(255, 255, 255, 0.4),
-    0 0 20px rgba(255, 45, 85, 0.6),
-    0 0 40px rgba(255, 45, 85, 0.2);
+    box-shadow:
+        inset 0 -4px 6px rgba(0, 0, 0, 0.5),
+        inset 0 4px 6px rgba(255, 255, 255, 0.4),
+        0 0 20px rgba(255, 45, 85, 0.6),
+        0 0 40px rgba(255, 45, 85, 0.2);
 }
 
 .chip-2 {
     background: radial-gradient(circle at 35% 35%, #fff176 0%, #ffe700 45%, #9a8a00 100%);
-    box-shadow: 
-    inset 0 -4px 6px rgba(0, 0, 0, 0.5),
-    inset 0 4px 6px rgba(255, 255, 255, 0.5),
-    0 0 20px rgba(255, 231, 0, 0.6),
-    0 0 40px rgba(255, 231, 0, 0.2);
+    box-shadow:
+        inset 0 -4px 6px rgba(0, 0, 0, 0.5),
+        inset 0 4px 6px rgba(255, 255, 255, 0.5),
+        0 0 20px rgba(255, 231, 0, 0.6),
+        0 0 40px rgba(255, 231, 0, 0.2);
 }
 
 /* Assessment Badge */
@@ -423,7 +467,7 @@ For now, two prominent corners are very Manga-style. */
     padding: 1rem 1.5rem;
     border-radius: 12px;
     color: white;
-    box-shadow: 0 8px 32px rgba(0,0,0,0.3);
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
     animation: slideInRight 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275);
     display: flex;
     flex-direction: column;
@@ -449,8 +493,15 @@ For now, two prominent corners are very Manga-style. */
 }
 
 @keyframes quote-fade {
-    from { opacity: 0; transform: translateX(-10px); }
-    to { opacity: 0.8; transform: translateX(0); }
+    from {
+        opacity: 0;
+        transform: translateX(-10px);
+    }
+
+    to {
+        opacity: 0.8;
+        transform: translateX(0);
+    }
 }
 
 .star-filled {
@@ -463,10 +514,15 @@ For now, two prominent corners are very Manga-style. */
 }
 
 @keyframes star-pop {
-    to { opacity: 1; transform: scale(1); }
+    to {
+        opacity: 1;
+        transform: scale(1);
+    }
 }
 
-.star-empty { color: rgba(255, 255, 255, 0.2); }
+.star-empty {
+    color: rgba(255, 255, 255, 0.2);
+}
 
 .comment-text {
     font-weight: 600;
@@ -476,8 +532,15 @@ For now, two prominent corners are very Manga-style. */
 }
 
 @keyframes slideInRight {
-    from { transform: translateX(100%); opacity: 0; }
-    to { transform: translateX(0); opacity: 1; }
+    from {
+        transform: translateX(100%);
+        opacity: 0;
+    }
+
+    to {
+        transform: translateX(0);
+        opacity: 1;
+    }
 }
 
 /* Missed Move Highlighting */
@@ -497,7 +560,7 @@ For now, two prominent corners are very Manga-style. */
 /* Latest Move Halo */
 .latest-piece {
     z-index: 5;
-    box-shadow: 
+    box-shadow:
         0 0 10px 2px var(--neon-cyan),
         0 0 20px 5px rgba(0, 229, 255, 0.4) !important;
     border: 2px solid var(--neon-cyan) !important;
@@ -505,22 +568,36 @@ For now, two prominent corners are very Manga-style. */
 }
 
 @keyframes halo-pulse {
-    from { box-shadow: 0 0 10px 2px var(--neon-cyan), 0 0 20px 5px rgba(0, 229, 255, 0.4); }
-    to { box-shadow: 0 0 15px 4px var(--neon-cyan), 0 0 30px 8px rgba(0, 229, 255, 0.6); }
+    from {
+        box-shadow: 0 0 10px 2px var(--neon-cyan), 0 0 20px 5px rgba(0, 229, 255, 0.4);
+    }
+
+    to {
+        box-shadow: 0 0 15px 4px var(--neon-cyan), 0 0 30px 8px rgba(0, 229, 255, 0.6);
+    }
 }
 
 @keyframes win-pulse {
-    from { transform: scale(1); filter: brightness(1); }
-    to { transform: scale(1.15); filter: brightness(1.5) contrast(1.2); }
+    from {
+        transform: scale(1);
+        filter: brightness(1);
+    }
+
+    to {
+        transform: scale(1.15);
+        filter: brightness(1.5) contrast(1.2);
+    }
 }
 
 /* Step 3: Heatmap Visuals */
 .heatmap-layer {
     display: flex;
     gap: 10px;
-    width: calc(7 * 60px + 6 * 10px + 50px); /* Match board width (spots + gaps + padding) */
+    width: calc(7 * 60px + 6 * 10px + 50px);
+    /* Match board width (spots + gaps + padding) */
     padding: 0 25px;
-    margin-top: -15px; /* Pull it closer to board */
+    margin-top: -15px;
+    /* Pull it closer to board */
     height: 10px;
     justify-content: center;
 }
@@ -537,9 +614,19 @@ For now, two prominent corners are very Manga-style. */
 }
 
 /* UI Utility Classes */
-.mt-mid { margin-top: 1.5rem; }
-.mt-loose { margin-top: 2rem; }
-.control-hint { font-size: 0.7rem; color: #8b949e; margin-top: 0.25rem; }
+.mt-mid {
+    margin-top: 1.5rem;
+}
+
+.mt-loose {
+    margin-top: 2rem;
+}
+
+.control-hint {
+    font-size: 0.7rem;
+    color: #8b949e;
+    margin-top: 0.25rem;
+}
 
 .outline-btn {
     background: transparent;
@@ -584,7 +671,8 @@ For now, two prominent corners are very Manga-style. */
     }
 
     .control-group {
-        min-width: 100%; /* Stack controls on mobile */
+        min-width: 100%;
+        /* Stack controls on mobile */
     }
 
     .action-buttons {
@@ -615,7 +703,7 @@ For now, two prominent corners are very Manga-style. */
     }
 
     .spot {
-        width: 10.5vw; 
+        width: 10.5vw;
         height: 10.5vw;
         max-width: 50px;
         max-height: 50px;
@@ -624,18 +712,30 @@ For now, two prominent corners are very Manga-style. */
     }
 
     /* Scale Corner Brackets to match smaller board */
-    .connect4-board::before, .connect4-board::after {
+    .connect4-board::before,
+    .connect4-board::after {
         width: 30px;
         height: 30px;
         border-width: 2px;
     }
 
-    .connect4-board::before { top: -5px; left: -5px; }
-    .connect4-board::after { bottom: -5px; right: -5px; }
+    .connect4-board::before {
+        top: -5px;
+        left: -5px;
+    }
+
+    .connect4-board::after {
+        bottom: -5px;
+        right: -5px;
+    }
 
     /* Match chip size to fluid spot size */
-    .chip-1::before, .chip-2::before {
-        top: 10%; left: 10%; right: 10%; bottom: 10%;
+    .chip-1::before,
+    .chip-2::before {
+        top: 10%;
+        left: 10%;
+        right: 10%;
+        bottom: 10%;
     }
 }
 
@@ -645,12 +745,12 @@ For now, two prominent corners are very Manga-style. */
         width: 11vw;
         height: 11vw;
     }
-    
+
     .connect4-board {
         padding: 6px;
         gap: 4px;
     }
-    
+
     .column {
         gap: 4px;
     }
@@ -710,6 +810,7 @@ For now, two prominent corners are very Manga-style. */
         transform: translate(0, 0) scale(1);
         opacity: 0.8;
     }
+
     100% {
         transform: translate(var(--dx), var(--dy)) scale(0);
         opacity: 0;
@@ -762,16 +863,52 @@ For now, two prominent corners are very Manga-style. */
 }
 
 @keyframes toast-slide-in {
-    from { transform: translateX(120%); opacity: 0; }
-    to { transform: translateX(0); opacity: 1; }
+    from {
+        transform: translateX(120%);
+        opacity: 0;
+    }
+
+    to {
+        transform: translateX(0);
+        opacity: 1;
+    }
 }
 
 @keyframes toast-slide-out {
-    from { transform: translateX(0); opacity: 1; }
-    to { transform: translateX(120%); opacity: 0; }
+    from {
+        transform: translateX(0);
+        opacity: 1;
+    }
+
+    to {
+        transform: translateX(120%);
+        opacity: 0;
+    }
 }
 
 @keyframes toast-progress-drain {
-    from { transform: scaleX(1); }
-    to { transform: scaleX(0); }
+    from {
+        transform: scaleX(1);
+    }
+
+    to {
+        transform: scaleX(0);
+    }
+}
+/* Latest Move Halo - Pulsing blue */
+.latest-piece {
+    box-shadow: 0 0 15px #00d2ff, 0 0 30px #00d2ff !important;
+    animation: latest-piece-pulse 2s infinite alternate ease-in-out !important;
+    border: 2px solid #00d2ff !important;
+}
+
+@keyframes latest-piece-pulse {
+    from {
+        box-shadow: 0 0 10px #00d2ff, 0 0 20px #00d2ff;
+        transform: scale(1);
+    }
+    to {
+        box-shadow: 0 0 20px #00d2ff, 0 0 40px #00d2ff;
+        transform: scale(1.05);
+    }
 }
