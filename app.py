@@ -304,14 +304,6 @@ def get_move():
         "winning_cells": winning_cells
     })
 
-PERSONALITY_QUOTES = {
-    1: ["Biological error in judgment. Logical flow disrupted.", "Critical processing error in your tactical layer.", "Fascinating... Your tactical decay is accelerating."],
-    2: ["Suboptimal. Analysis reveals several more efficient paths.", "Inaccurate. Your neural patterns are predictable.", "Efficiency decreased. Recalibrating threat level."],
-    3: ["Standard tactical execution. Proceeding.", "Solid. A move consistent with baseline probability.", "Within acceptable parameters."],
-    4: ["A strong maneuver. Your synergy with the grid is improving.", "Impressive. You are calculating faster than my previous opponent.", "Great move. The simulation responds well to your input."],
-    5: ["Brilliant! My sub-processors didn't catch that until too late.", "Remarkable. That move is statistically perfect.", "You are... more than a simple biological player. Fascinating."]
-}
-
 # Configure Gemini
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
 if GEMINI_API_KEY:
@@ -400,13 +392,6 @@ def assess_move():
     else:
         score, comment = 1, "Blunder!"
 
-    score_desc = {
-        1: "Blunder",
-        2: "Mistake",
-        3: "Solid",
-        4: "Strong",
-        5: "Brilliant"
-    }
     
     quote = "Analysis complete."
     if gemini_model:
