@@ -299,13 +299,18 @@ Set a threshold (e.g. $20/month) — GCP will email you before you're surprised.
 - [ ] **Monetization Strategy:** Consider adding subtle ads or a premium model to cover hosting costs.
 - [ ] **Move History:** Add a feature to download or replay past games from the UI.
 - [ ] **Real-time Analytics:** Show how many users are currently connected and playing.
-- [ ] **Global Player Map:** Add a window showing which country players are connecting from (GeoIP).
+- [x] **Global Player Map:** Geo-IP welcome message implemented via a server-side `/api/geoip` proxy (avoids CSP/CORS blocks).
 - [ ] **SQLite Integration:** Implement a robust database for game results and telemetry to replace the current CSV system.
 - [x] **Dynamic Environment:** Successfully implemented via `background_manager.py`. The system automatically generates and rotates high-fidelity cyberpunk backgrounds using the Gemini API and Vertex AI Imagen once a week, keeping the UI fresh and modern.
 - [x] **Root Cause Analysis (RCA):** Completed detailed analysis of the April 2026 deployment outages.
 
 ## Version History
- 
+
+### [v1.7.0] - 2026-04-10
+- **Training Recovery**: Diagnosed value head saturation in checkpoint 910 (value always ~1.0, uniform policy). Rolled back to `checkpoint_best.pt` (iter 460), cleared the contaminated replay buffer, and lowered base LR to `5e-4` for a clean recovery run.
+- **Geo-IP Proxy**: Added `/api/geoip` server-side proxy route in `app.py` to resolve the geolocation welcome message failing due to CSP `default-src 'self'` blocking direct client-side calls to `geolocation-db.com`. Frontend now calls `/api/geoip` (same-origin).
+- **Restored `print_board`**: Re-added the missing `print_board` utility to `mcts.py`, which is imported by `visualize.py` and `play.py`.
+
 ### [v1.6.0] - 2026-04-09
 - **Pipeline & API Stability pass**: Implemented 15 critical bug fixes (including 8 suggested by Claude):
     - **Visualisation Guard**: Added `root is None` check in `visualize_mcts.py` to prevent crashes.

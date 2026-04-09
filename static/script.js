@@ -656,11 +656,9 @@ async function initWelcomeMessage() {
     toast.classList.remove('hidden');
 
     try {
-        // Fetch Geo-IP info (Country) using a more robust provider
-        // geolocation-db.com is more reliable for client-side lookups
-        const response = await fetch('https://geolocation-db.com/json/');
+        const response = await fetch('/api/geoip');
         if (!response.ok) throw new Error("Geo-IP lookup failed");
-        
+
         const data = await response.json();
         const country = data.country_name || "the physical realm";
         

@@ -82,6 +82,18 @@ class Connect4:
         return new_game
 
 
+def print_board(game: Connect4):
+    """Print a human-readable board to stdout."""
+    print("\n  0 1 2 3 4 5 6")
+    for row in range(6):
+        row_str = f"{row} "
+        for col in range(7):
+            cell = game.board[row, col]
+            row_str += ("X " if cell == 1 else "O " if cell == -1 else ". ")
+        print(row_str)
+    print()
+
+
 def board_to_tensor(game: Connect4) -> torch.Tensor:
     """
     Encodes the board state into a (3, 6, 7) tensor for AlphaNet.

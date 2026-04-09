@@ -7,6 +7,8 @@ import torch
 import numpy as np
 import pathlib
 import threading
+import urllib.request
+import json as _json
 from collections import OrderedDict # FIX 6
 from flask import Flask, request, jsonify, render_template
 from flask_limiter import Limiter
@@ -18,8 +20,8 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-VERSION = "1.6.0"
-LAST_COMMIT = "2026-04-09 14:38 UTC"
+VERSION = "1.7.0"
+LAST_COMMIT = "2026-04-10 00:15 UTC"
 
 from mcts import Connect4, run_mcts_simulations
 import background_manager # NEW: Dynamic Environment manager
@@ -455,6 +457,17 @@ def assess_move():
 @app.route("/health")
 def health():
     return jsonify({"status": "ok"}), 200
+
+@app.route("/api/geoip")
+@limiter.limit("10 per minute")
+def geoip():
+    """Proxy geo-IP lookup server-side to avoid CSP/CORS issues."""
+    try:
+        with urllib.request.urlopen("https://geolocation-db.com/json/", timeout=4) as resp:
+            data = _json.loads(resp.read().decode())
+        return jsonify({"country_name": data.get("country_name", "")})
+    except Exception:
+        return jsonify({"country_name": ""}), 200
 
 # NEW: Dynamic Environment Background Refresh
 @app.route("/api/admin/refresh_background")
