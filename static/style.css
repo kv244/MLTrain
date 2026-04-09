@@ -470,6 +470,21 @@ For now, two prominent corners are very Manga-style. */
     border: 2px solid white !important;
 }
 
+/* Latest Move Halo */
+.latest-piece {
+    z-index: 5;
+    box-shadow: 
+        0 0 10px 2px var(--neon-cyan),
+        0 0 20px 5px rgba(0, 229, 255, 0.4) !important;
+    border: 2px solid var(--neon-cyan) !important;
+    animation: halo-pulse 2s infinite alternate ease-in-out;
+}
+
+@keyframes halo-pulse {
+    from { box-shadow: 0 0 10px 2px var(--neon-cyan), 0 0 20px 5px rgba(0, 229, 255, 0.4); }
+    to { box-shadow: 0 0 15px 4px var(--neon-cyan), 0 0 30px 8px rgba(0, 229, 255, 0.6); }
+}
+
 @keyframes win-pulse {
     from { transform: scale(1); filter: brightness(1); }
     to { transform: scale(1.15); filter: brightness(1.5) contrast(1.2); }

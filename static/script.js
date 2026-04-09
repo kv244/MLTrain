@@ -137,6 +137,14 @@ function startGame(human_role) {
     if (typeof AudioEngine !== 'undefined' && !AudioEngine.isPlaying) {
         const isPlaying = AudioEngine.toggle();
         syncAudioUI(isPlaying);
+        
+        // Auto-stop after 10 seconds
+        setTimeout(() => {
+            if (AudioEngine.isPlaying) {
+                AudioEngine.toggle();
+                syncAudioUI(false);
+            }
+        }, 10000);
     }
 
     // If AI is player 1, trigger AI move immediately
@@ -317,9 +325,16 @@ function playMove(r, c, player) {
     createStardustTrail(c, r, player);
 
     board[r][c] = player;
+    
+    // Clear previous latest piece
+    document.querySelectorAll('.latest-piece').forEach(el => el.classList.remove('latest-piece'));
+    
     const spot = document.getElementById(`spot-${r}-${c}`);
     if (player === 1) spot.classList.add('chip-1');
     else if (player === -1) spot.classList.add('chip-2');
+    
+    // Set as latest piece
+    spot.classList.add('latest-piece');
 }
 
 function createStardustTrail(col, endRow, player) {
@@ -422,6 +437,9 @@ function undoMove() {
 }
 
 function renderBoard() {
+    // Clear latest move highlight on full render/undo
+    document.querySelectorAll('.latest-piece').forEach(el => el.classList.remove('latest-piece'));
+
     for (let r = 0; r < ROWS; r++) {
         for (let c = 0; c < COLS; c++) {
             const spot = document.getElementById(`spot-${r}-${c}`);

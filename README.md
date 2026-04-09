@@ -305,6 +305,11 @@ Set a threshold (e.g. $20/month) — GCP will email you before you're surprised.
 - [x] **Root Cause Analysis (RCA):** Completed detailed analysis of the April 2026 deployment outages.
 
 ## Version History
+ 
+### [v1.5.0] - 2026-04-09
+- **Generative AI Assessments**: Switched to Gemini-powered evaluation comments for 1-5 star ratings, replacing hardcoded strings with atmospheric, atmospheric personality.
+- **Visual Legibility**: Added a pulsing neon blue halo to highlight the most recent moves for both computer and player.
+- **Audio Housekeeping**: Implemented an auto-stop timer (10s) for the background soundtrack to ensure a clean atmospheric intro without repetitive loops.
 
 ### [v1.4.0] - 2026-04-06
 - **Deployment Self-Backup**: Added an automatic `tar` archive step to the GCP deployment harness (`deploy.yml`) to capture the "live" state before pulling new code.

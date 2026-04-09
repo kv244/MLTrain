@@ -12,12 +12,13 @@ from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
 from werkzeug.middleware.proxy_fix import ProxyFix
 import openvino as ov
+import google.generativeai as genai
 from dotenv import load_dotenv
 
 load_dotenv()
 
-VERSION = "1.0.2"
-LAST_COMMIT = "2026-04-04 08:32 UTC"
+VERSION = "1.5.0"
+LAST_COMMIT = "2026-04-09 14:15 UTC"
 
 from mcts import Connect4, run_mcts_simulations
 import background_manager # NEW: Dynamic Environment manager
@@ -310,6 +311,14 @@ PERSONALITY_QUOTES = {
     5: ["Brilliant! My sub-processors didn't catch that until too late.", "Remarkable. That move is statistically perfect.", "You are... more than a simple biological player. Fascinating."]
 }
 
+# Configure Gemini
+GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
+if GEMINI_API_KEY:
+    genai.configure(api_key=GEMINI_API_KEY)
+    gemini_model = genai.GenerativeModel('gemini-2.0-flash')
+else:
+    gemini_model = None
+
 @app.route("/api/assess", methods=["POST"])
 def assess_move():
     """Evaluates a specific move against the AI's best recommended move."""
@@ -382,8 +391,34 @@ def assess_move():
     else:
         score, comment = 1, "Blunder!"
 
-    import random
-    quote = random.choice(PERSONALITY_QUOTES.get(score, ["Analysis complete."]))
+    score_desc = {
+        1: "Blunder",
+        2: "Mistake",
+        3: "Solid",
+        4: "Strong",
+        5: "Brilliant"
+    }
+    
+    quote = "Analysis complete."
+    if gemini_model:
+        try:
+            category = score_desc.get(score, "Standard")
+            prompt = (
+                f"You are a sophisticated AI commentator for a cyberpunk-themed Connect 4 game. "
+                f"A player just made a move that was evaluated as a '{category}' ({score}/5 stars). "
+                f"Generate a short, atmospheric, and slightly robotic comment (max 15 words) reflecting this move quality. "
+                f"Use cyberpunk terminology. Output ONLY the comment."
+            )
+            response = gemini_model.generate_content(prompt)
+            quote = response.text.strip().strip('"')
+        except Exception as e:
+            print(f"Gemini Assessment Error: {e}")
+            # Fallback to hardcoded logic below
+            import random
+            quote = random.choice(PERSONALITY_QUOTES.get(score, ["Analysis complete."]))
+    else:
+        import random
+        quote = random.choice(PERSONALITY_QUOTES.get(score, ["Analysis complete."]))
 
     # ── Step 1: Detect Winning Cells ──
     winning_cells = []
