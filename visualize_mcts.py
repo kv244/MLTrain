@@ -283,6 +283,10 @@ def main():
     chosen = int(np.argmax(probs))
     print(f"Best move: column {chosen}  (visit share: {probs[chosen]:.1%})")
 
+    if root is None:
+        print("Tactical short-circuit fired — no MCTS tree to visualize.")
+        return
+
     print("\nGenerating tree diagram...")
     visualize_tree(root, max_depth=args.tree_depth, output_dir=args.output_dir)
 

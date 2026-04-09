@@ -41,6 +41,9 @@ document.addEventListener("DOMContentLoaded", () => {
         });
     }
 
+    // Welcome Message (Geo-IP)
+    initWelcomeMessage();
+
     // Step 4: Hint button
     if (_btnHint) {
         _btnHint.addEventListener('click', () => getHint());
@@ -341,10 +344,10 @@ function createStardustTrail(col, endRow, player) {
     const colEl = document.querySelector(`.column[data-col="${col}"]`);
     if (!colEl) return;
 
-    // We append to colEl, so (0,0) is the top-left of the column.
-    // X is always 50% (center of column).
-    const startY = 0;
-    const endY = (endRow / ROWS) * 100; // Percentage based for responsiveness
+    const colHeight = colEl.clientHeight;
+    // index 0 is top, index ROWS-1 is bottom. 
+    // center of row R is at (R + 0.5) / ROWS * height
+    const endY = ((endRow + 0.5) / ROWS) * colHeight;
 
     const particleCount = 12;
     const duration = 500;
@@ -353,15 +356,13 @@ function createStardustTrail(col, endRow, player) {
         setTimeout(() => {
             const p = document.createElement('div');
             p.className = 'stardust-particle';
-            // Set base positioning (centered)
-            p.style.cssText = "left: 50%; top: 0;"; // This might still be blocked, so we'll use animate instead
+            p.style.cssText = "left: 50%; top: 0;";
             
             colEl.appendChild(p);
             
             const progress = i / particleCount;
             const currentY = (endY * progress);
 
-            // Use Web Animations API (CSP-safe if not using string styles)
             p.animate([
                 { transform: `translate(-50%, ${currentY}px) scale(1)`, opacity: 0.8 },
                 { transform: `translate(calc(-50% + ${Math.random()*40-20}px), ${currentY + 20}px) scale(0)`, opacity: 0 }
@@ -631,4 +632,39 @@ function endGame(message, winningLine = null) {
             })
         }).catch(e => console.error("Telemetry log failed:", e));
     }
+}
+
+async function initWelcomeMessage() {
+    const welcomeShown = sessionStorage.getItem('welcomeToastShown');
+    if (welcomeShown) return;
+
+    const toast = document.getElementById('welcomeToast');
+    const msgEl = document.getElementById('welcomeMessage');
+    if (!toast || !msgEl) return;
+
+    // Show initial trace message
+    toast.classList.remove('hidden');
+
+    try {
+        // Fetch Geo-IP info (Country)
+        // ipapi.co is free for development usage without key
+        const response = await fetch('https://ipapi.co/json/');
+        if (!response.ok) throw new Error("Geo-IP lookup failed");
+        
+        const data = await response.json();
+        const country = data.country_name || "the physical realm";
+        
+        msgEl.innerText = `Thank you for joining me from ${country}!`;
+    } catch (e) {
+        console.warn("Welcome Geo-IP failed:", e);
+        msgEl.innerText = "Thank you for joining me on the grid!";
+    }
+
+    sessionStorage.setItem('welcomeToastShown', 'true');
+
+    // Auto-dismiss after 5 seconds to match progress bar
+    setTimeout(() => {
+        toast.style.animation = 'toast-slide-out 0.5s forwards';
+        setTimeout(() => toast.remove(), 500);
+    }, 5000);
 }

@@ -64,7 +64,7 @@ def update_background():
         # 3. Save the image atomically
         tmp_path = BG_PATH.with_suffix(".tmp")
         images[0].save(str(tmp_path))
-        tmp_path.rename(BG_PATH)
+        tmp_path.replace(BG_PATH)
         
         print("[BackgroundManager] Background updated successfully.")
         return True

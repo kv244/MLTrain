@@ -306,6 +306,17 @@ Set a threshold (e.g. $20/month) — GCP will email you before you're surprised.
 
 ## Version History
  
+### [v1.6.0] - 2026-04-09
+- **Stability Pass (Claude-Initiated)**: Implemented 7 critical bug fixes for pipeline stability:
+    - **Visualisation Guard**: Added `root is None` check in `visualize_mcts.py` to prevent crashes during tactical short-circuits.
+    - **LR Schedule Recovery**: Fixed `train.py` to correctly restore the `MultiStepLR` state and `last_epoch` on training resume.
+    - **Optimizer Consistency**: Removed hardcoded LR resets on resume to preserve the loaded optimizer state.
+    - **Improved Gating**: Updated `train.py` to prefer `checkpoint_best.pt` on resume for more accurate champion benchmarking.
+    - **Draw Accounting**: Fixed binomial test truncation by using `round(wins)` instead of `int(wins)`.
+    - **Training Logic**: Moved `scheduler.step()` inside the training block to synchronize the milestone clock with actual gradient updates.
+    - **Windows Atomic Save**: Switched to `Path.replace()` in `background_manager.py` for reliable file overwriting on Windows.
+    - **Redundancy Cleanup**: Streamlined `export_onnx.py` by removing redundant model loads.
+ 
 ### [v1.5.0] - 2026-04-09
 - **Generative AI Assessments**: Switched to Gemini-powered evaluation comments for 1-5 star ratings, replacing hardcoded strings with atmospheric, atmospheric personality.
 - **Visual Legibility**: Added a pulsing neon blue halo to highlight the most recent moves for both computer and player.

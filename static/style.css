@@ -307,6 +307,7 @@ For now, two prominent corners are very Manga-style. */
     cursor: pointer;
     border-radius: 30px;
     transition: background-color 0.2s;
+    position: relative; /* Fixed: Required for absolute particles */
 }
 
 .column:hover {
@@ -678,7 +679,7 @@ For now, two prominent corners are very Manga-style. */
     pointer-events: none;
     z-index: 100;
     box-shadow: 0 0 5px var(--ui-glow), 0 0 10px white;
-    animation: stardust-fade 0.6s ease-out forwards;
+    /* Removed CSS animation to prevent conflict with Web Animations API */
 }
 
 @keyframes stardust-fade {
@@ -690,4 +691,64 @@ For now, two prominent corners are very Manga-style. */
         transform: translate(var(--dx), var(--dy)) scale(0);
         opacity: 0;
     }
+}
+
+/* Welcome Toast */
+.welcome-toast {
+    position: fixed;
+    top: 20px;
+    right: 20px;
+    z-index: 1100;
+    background: rgba(10, 10, 25, 0.85);
+    backdrop-filter: blur(10px);
+    border: 1px solid var(--neon-cyan);
+    border-radius: 12px;
+    padding: 1rem 1.5rem;
+    color: white;
+    box-shadow: 0 0 20px rgba(0, 229, 255, 0.3), inset 0 0 10px rgba(0, 229, 255, 0.2);
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    min-width: 280px;
+    animation: toast-slide-in 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+    overflow: hidden;
+}
+
+.toast-content {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    font-weight: 600;
+    letter-spacing: 0.5px;
+}
+
+.toast-icon {
+    font-size: 1.2rem;
+    filter: drop-shadow(0 0 5px var(--neon-cyan));
+}
+
+.toast-progress {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    height: 3px;
+    background: var(--neon-cyan);
+    width: 100%;
+    transform-origin: left;
+    animation: toast-progress-drain 5s linear forwards;
+}
+
+@keyframes toast-slide-in {
+    from { transform: translateX(120%); opacity: 0; }
+    to { transform: translateX(0); opacity: 1; }
+}
+
+@keyframes toast-slide-out {
+    from { transform: translateX(0); opacity: 1; }
+    to { transform: translateX(120%); opacity: 0; }
+}
+
+@keyframes toast-progress-drain {
+    from { transform: scaleX(1); }
+    to { transform: scaleX(0); }
 }

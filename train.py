@@ -74,17 +74,19 @@ if pretrained_checkpoints:
     if 'iteration' in ckpt_data:
         start_iteration = ckpt_data['iteration'] + 1
 
-    # Reset LR — the saved LR of 1e-5 is too low to continue learning effectively
-    for param_group in optimizer.param_groups:
-        param_group['lr'] = 1e-4
-
-best_ckpt_path = pretrained_checkpoints[-1] if pretrained_checkpoints else None
+if os.path.exists("checkpoint_best.pt"):
+    best_ckpt_path = "checkpoint_best.pt"
+elif pretrained_checkpoints:
+    best_ckpt_path = pretrained_checkpoints[-1]
+else:
+    best_ckpt_path = None
 import numpy as np
 
 # LR schedule: drop by 10× at iteration 100, again at 150.
 # Keeps updates aggressive early, then stabilises loss in late training.
 scheduler = torch.optim.lr_scheduler.MultiStepLR(
-    optimizer, milestones=[700, 1000], gamma=0.1
+    optimizer, milestones=[700, 1000], gamma=0.1,
+    last_epoch=start_iteration - 1
 )
 
 import sys
@@ -270,7 +272,7 @@ if __name__ == "__main__":
                 # One-sided test: is the current model significant better than 50/50?
                 # We round wins to integer for binomtest; draws count as 0.5 but binomtest needs counts.
                 # For fairness in binomtest, we treat draws as half-wins.
-                res = binomtest(int(wins), total, p=0.5, alternative='greater')
+                res = binomtest(round(wins), total, p=0.5, alternative='greater')
                 win_rate = wins / total
                 print(f"[{get_timestamp()}] Evaluation result: {win_rate*100:.1f}% win rate (p={res.pvalue:.4f})")
                 
@@ -293,5 +295,15 @@ if __name__ == "__main__":
                     'model_state_dict': model.state_dict(),
                 }, best_ckpt_path)
 
-        scheduler.step()
+            if iteration % CHECKPOINT_EVERY == 0:
+                ckpt_path = f"checkpoint_{iteration:04d}.pt"
+                torch.save({
+                    'iteration': iteration,
+                    'model_state_dict': model.state_dict(),
+                    'optimizer_state_dict': optimizer.state_dict(),
+                    'scaler_state_dict': scaler.state_dict(),
+                }, ckpt_path)
+                print(f"[{get_timestamp()}]           → saved {ckpt_path}")
+
+            scheduler.step()
 

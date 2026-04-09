@@ -11,6 +11,14 @@
     <!-- OpenVINO runtime is handled on the backend now, no need for heavy frontend models -->
 </head>
 <body class="cyberpunk-theme">
+    <!-- Welcome Toast -->
+    <div id="welcomeToast" class="welcome-toast hidden">
+        <div class="toast-content">
+            <span class="toast-icon">🌐</span>
+            <span id="welcomeMessage">Connecting to the grid...</span>
+        </div>
+        <div class="toast-progress"></div>
+    </div>
     <div id="glitchOverlay"></div>
     <div id="screenFlash"></div>
     <div id="shockwave"></div>

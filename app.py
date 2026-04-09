@@ -405,20 +405,39 @@ def assess_move():
             category = score_desc.get(score, "Standard")
             prompt = (
                 f"You are a sophisticated AI commentator for a cyberpunk-themed Connect 4 game. "
-                f"A player just made a move that was evaluated as a '{category}' ({score}/5 stars). "
-                f"Generate a short, atmospheric, and slightly robotic comment (max 15 words) reflecting this move quality. "
-                f"Use cyberpunk terminology. Output ONLY the comment."
+                f"A player just made a move that was evaluated as {score}/5 stars. "
+                f"Provide a response in the following format:\n"
+                f"LABEL: [catchy 1-2 word label, e.g. 'Sharp Edge' or 'Grid Glitch']\n"
+                f"QUOTE: [short atmospheric robotic quote, max 15 words]\n"
+                f"Use cyberpunk terminology. Output ONLY the requested format."
             )
             response = gemini_model.generate_content(prompt)
-            quote = response.text.strip().strip('"')
+            responseText = response.text
+            
+            # More robust parsing using regex or keyword search
+            import re
+            label_match = re.search(r"LABEL:\s*(.*)", responseText, re.IGNORECASE)
+            quote_match = re.search(r"QUOTE:\s*(.*)", responseText, re.IGNORECASE)
+            
+            if label_match:
+                comment = label_match.group(1).split("\n")[0].strip().strip('"*#')
+            if quote_match:
+                quote = quote_match.group(1).split("\n")[0].strip().strip('"*#')
+
         except Exception as e:
             print(f"Gemini Assessment Error: {e}")
-            # Fallback to hardcoded logic below
-            import random
-            quote = random.choice(PERSONALITY_QUOTES.get(score, ["Analysis complete."]))
+            # Robust fallback to ensure the UI doesn't look empty/broken
+            fallbacks = {
+                1: {"label": "Blunder", "quote": "Biological error detected. Tactical decay."},
+                2: {"label": "Inaccurate", "quote": "Suboptimal pattern. Recalibrating logic."},
+                3: {"label": "Standard", "quote": "Acceptable simulation data. Proceeding."},
+                4: {"label": "Strong", "quote": "High-efficiency maneuver. Synergy quantified."},
+                5: {"label": "Brilliant", "quote": "Statistical anomaly! Your patterns are evolving."}
+            }
+            f = fallbacks.get(score, fallbacks[3])
+            comment, quote = f["label"], f["quote"]
     else:
-        import random
-        quote = random.choice(PERSONALITY_QUOTES.get(score, ["Analysis complete."]))
+        quote = "Analysis complete."
 
     # ── Step 1: Detect Winning Cells ──
     winning_cells = []

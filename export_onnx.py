@@ -23,7 +23,7 @@ def main():
         model.load_state_dict(checkpoint['model_state_dict'])
     except KeyError:
         print("Warning: Checkpoint does not contain 'model_state_dict'. Trying to load raw state_dict.")
-        model.load_state_dict(torch.load(args.checkpoint, map_location='cpu', weights_only=True))
+        model.load_state_dict(checkpoint)
 
     model.eval()
 
