@@ -365,14 +365,17 @@ def assess_move():
     if move not in game.get_valid_moves():
         return jsonify({"error": "Column is full or invalid"}), 400
 
-    # Get AI's opinion on this state
+    # Get AI's opinion on this state.
+    # temperature=1.0 gives visit-count proportions, so p_move/max_p is a
+    # continuous ratio. temperature=0 returns a one-hot which collapses every
+    # non-best move to p=0 and scores everything as either 1 or 5 stars.
     mcts_probs = run_mcts_simulations(
         game, model, device,
         num_sims=simulations,
-        temperature=0,
+        temperature=1.0,
         add_dirichlet_noise=False
     )
-    
+
     max_p = np.max(mcts_probs)
     p_move = mcts_probs[move]
     
@@ -395,15 +398,24 @@ def assess_move():
         score, comment = 1, "Blunder!"
 
     
+    best_move = int(np.argmax(mcts_probs))
     quote = "Analysis complete."
     if gemini_model:
         try:
+            move_quality_pct = int(round(p_move / max_p * 100)) if max_p > 0 else 0
+            same_as_best = (move == best_move)
+            move_context = (
+                f"played column {move} (the optimal move was column {best_move}), "
+                f"capturing {move_quality_pct}% of the AI's confidence"
+                if not same_as_best else
+                f"played column {move}, which IS the optimal move ({move_quality_pct}% confidence match)"
+            )
             prompt = (
                 f"You are the 'Grid Overseer', a cynical and sophisticated AI commentator for a high-stakes cyberpunk Connect 4 terminal. "
-                f"A player just made a move that was evaluated as {score}/5 stars. "
+                f"A player just {move_context}. Rated {score}/5 stars.\n"
                 f"Provide a unique, non-generic response in the following format:\n"
                 f"LABEL: [catchy 1-2 word label, e.g. 'Neural Spike', 'Logic Leak', 'Ghost Protocol']\n"
-                f"QUOTE: [short atmospheric quote, max 10 words]\n"
+                f"QUOTE: [short atmospheric quote referencing the move, max 10 words]\n"
                 f"Tone guide: 1-2 stars (mocking/cold), 3-4 stars (neutral/impressed), 5 stars (fascinated/alarmed). "
                 f"Use cyberpunk slang. Output ONLY the requested format."
             )
@@ -449,7 +461,7 @@ def assess_move():
         "score": score,
         "comment": comment,
         "ai_quote": quote,
-        "best_move": int(np.argmax(mcts_probs)),
+        "best_move": best_move,
         "probs": [float(p) for p in mcts_probs],
         "winning_cells": winning_cells
     })
