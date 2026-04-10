@@ -169,8 +169,20 @@ def evaluate_model(current_model, best_model, device, n_games=EVAL_GAMES):
         # Alternate who goes first
         current_player_at_start = 1 if i % 2 == 0 else -1
         game.current_player = current_player_at_start
-        
-        while True:
+
+        # v1.7.0 (2026-04-10) — Bug fix: replaced `while True` with bounded loop.
+        # The original loop had no move-count guard. Combined with the expand()
+        # sum_p==0 bug (silent no-children case), MCTS could return argmax=0 on
+        # an all-zero visit array, selecting a full column and returning None from
+        # play(), causing an uncaught unpack error or — in the temperature=0 path —
+        # a silent hang when a full column is played repeatedly. Additionally added
+        # an explicit validity check on the chosen move and a None-return guard on
+        # play() as belt-and-suspenders defence.
+        for _ in range(42):  # Connect 4 has at most 42 moves; hard cap prevents hangs
+            valid = game.get_valid_moves()
+            if not valid:
+                wins += 0.5  # Draw
+                break
             # Use 50 sims for fast evaluation
             active_model = current_model if game.current_player == 1 else best_model
             mcts_probs = run_mcts_simulations(
@@ -178,14 +190,16 @@ def evaluate_model(current_model, best_model, device, n_games=EVAL_GAMES):
                 num_sims=50, temperature=0, add_dirichlet_noise=False
             )
             move = int(np.argmax(mcts_probs))
-            r, c = game.play(move)
+            if move not in valid:
+                move = valid[0]  # Fallback: pick first legal move
+            result = game.play(move)
+            if result is None:
+                break  # Should never happen after the guard above
+            r, c = result
 
             if game.check_win(r, c):
-                if game.current_player == -1: # Current model just moved and won
+                if game.current_player == -1:  # current model (player 1) just moved and won
                     wins += 1
-                break
-            if not game.get_valid_moves():
-                wins += 0.5 # Draw
                 break
                 
     return wins, n_games

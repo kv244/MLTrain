@@ -152,28 +152,38 @@ class MCTSNode:
 
     def expand(self, policy_probs):
         valid_moves = self.game.get_valid_moves()
-        # Mask and re-normalize policy
-        sum_p = 0.0
+        if not valid_moves:
+            return
+
+        # v1.7.0 (2026-04-10) — Bug fix: uniform fallback when sum_p == 0
+        # The original code was `if sum_p > 0: <add children>` which silently
+        # added NO children when the network outputs near-zero logits for all
+        # valid moves (float32 underflow after softmax). The node then stayed a
+        # leaf but was not marked terminal, causing MCTS to re-evaluate the same
+        # node for every remaining simulation. After num_sims iterations the visit
+        # array was all-zeros, np.argmax returned col 0 by default, and if col 0
+        # was full game.play(0) returned None — hanging evaluate_model() forever
+        # (observed: 5+ hour stall during champion gating at iteration 480).
+        # Fix: fall back to a uniform prior over valid moves instead of skipping.
+        # Dirichlet noise already handles exploration in self-play; this only
+        # matters for the no-noise evaluation path.
+        sum_p = sum(policy_probs[m] for m in valid_moves)
+        uniform = sum_p <= 0
         for move in valid_moves:
-            sum_p += policy_probs[move]
-            
-        if sum_p > 0:
-            for move in valid_moves:
-                child_game = self.game.clone()
-                r, c = child_game.play(move) 
-                child = MCTSNode(child_game, parent=self)
-                child.prior = policy_probs[move] / sum_p
-                
-                # Check terminal status during expansion
-                win_cells = child_game.check_win(r, c)
-                if win_cells:
-                    # Previous player (parent_player) won.
-                    # Value from perspective of current player (child_game.current_player) is -1.0.
-                    child.terminal_value = -1.0
-                elif not child_game.get_valid_moves():
-                    child.terminal_value = 0.0 # Draw
-                    
-                self.children[move] = child
+            child_game = self.game.clone()
+            r, c = child_game.play(move)
+            child = MCTSNode(child_game, parent=self)
+            child.prior = (1.0 / len(valid_moves)) if uniform else (policy_probs[move] / sum_p)
+
+            # Check terminal status during expansion
+            win_cells = child_game.check_win(r, c)
+            if win_cells:
+                # Previous player won; value from child's perspective is -1.0
+                child.terminal_value = -1.0
+            elif not child_game.get_valid_moves():
+                child.terminal_value = 0.0  # Draw
+
+            self.children[move] = child
 
     def backpropagate(self, value):
         self.visit_count += 1
