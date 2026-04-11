@@ -418,7 +418,7 @@ For now, two prominent corners are very Manga-style. */
     pointer-events: none;
 }
 
-/* Subtle concentric rings for physical texture */
+/* Inner ring — shared base */
 .chip-1::before,
 .chip-2::before {
     content: '';
@@ -428,9 +428,37 @@ For now, two prominent corners are very Manga-style. */
     right: 15%;
     bottom: 15%;
     border-radius: 50%;
-    border: 1px solid rgba(0, 0, 0, 0.1);
-    box-shadow: inset 0 0 5px rgba(0, 0, 0, 0.1);
+    border: 1.5px solid rgba(0, 0, 0, 0.1);
     pointer-events: none;
+    /* transform-origin defaults to 50% 50% — rotates around its own center */
+}
+
+/*
+ * v1.8.0 — 2026-04-11  Piece FX overhaul
+ * ─────────────────────────────────────────────────────────────────────────
+ * Why: pieces were static circles with no life. Three layered effects added:
+ *   1. Spinning inner ring  (::before) — CW for player 1, CCW for player 2,
+ *      so you can tell at a glance whose piece is whose mid-animation.
+ *   2. Drop-in + sizzle (.chip-fresh) — plays for 800 ms on placement,
+ *      then class is removed by JS so the breathing animation takes over.
+ *   3. Breathing glow (:not(.chip-fresh)) — slow pulse on settled pieces
+ *      to keep the board feeling alive without distracting from play.
+ *   4. .spark — fixed-position particles spawned by spawnSparks() in JS,
+ *      appended to <body> to escape the overflow:hidden on .spot.
+ * ─────────────────────────────────────────────────────────────────────────
+ */
+
+/* Player 1: red ring spins clockwise */
+.chip-1::before {
+    border-color: rgba(255, 80, 100, 0.65);
+    box-shadow: inset 0 0 5px rgba(255, 50, 80, 0.2), 0 0 4px rgba(255, 80, 100, 0.35);
+    animation: chip-ring-cw 3.5s linear infinite;
+}
+/* Player 2: gold ring spins counter-clockwise */
+.chip-2::before {
+    border-color: rgba(255, 210, 0, 0.65);
+    box-shadow: inset 0 0 5px rgba(255, 200, 0, 0.2), 0 0 4px rgba(255, 210, 0, 0.35);
+    animation: chip-ring-ccw 3.5s linear infinite;
 }
 
 .chip-1 {
@@ -441,7 +469,6 @@ For now, two prominent corners are very Manga-style. */
         0 0 20px rgba(255, 45, 85, 0.6),
         0 0 40px rgba(255, 45, 85, 0.2);
 }
-
 .chip-2 {
     background: radial-gradient(circle at 35% 35%, #fff176 0%, #ffe700 45%, #9a8a00 100%);
     box-shadow:
@@ -449,6 +476,71 @@ For now, two prominent corners are very Manga-style. */
         inset 0 4px 6px rgba(255, 255, 255, 0.5),
         0 0 20px rgba(255, 231, 0, 0.6),
         0 0 40px rgba(255, 231, 0, 0.2);
+}
+
+/* Settled pieces: gentle breathing glow */
+.chip-1:not(.chip-fresh) { animation: chip-1-breathe 3s ease-in-out infinite; }
+.chip-2:not(.chip-fresh) { animation: chip-2-breathe 3s ease-in-out infinite; }
+
+/* Freshly placed: drop-in scale + sizzle glow burst */
+.chip-1.chip-fresh {
+    animation:
+        chip-drop-in   0.4s  cubic-bezier(.175,.885,.32,1.275) forwards,
+        chip-1-sizzle  0.65s ease-out;
+}
+.chip-2.chip-fresh {
+    animation:
+        chip-drop-in   0.4s  cubic-bezier(.175,.885,.32,1.275) forwards,
+        chip-2-sizzle  0.65s ease-out;
+}
+
+/* Spark particles (fixed to viewport, appended to <body> by JS) */
+.spark {
+    position: fixed;
+    width: 2px;
+    height: 10px;
+    border-radius: 1px;
+    pointer-events: none;
+    z-index: 9999;
+    animation: spark-fly 0.55s ease-out forwards;
+    transform-origin: center 100%;
+}
+
+@keyframes chip-ring-cw  { to { transform: rotate(360deg);  } }
+@keyframes chip-ring-ccw { to { transform: rotate(-360deg); } }
+
+@keyframes chip-drop-in {
+    0%   { transform: scale(0.1);  opacity: 0.3; }
+    55%  { transform: scale(1.2);               }
+    78%  { transform: scale(0.93);              }
+    100% { transform: scale(1);    opacity: 1;  }
+}
+
+@keyframes chip-1-sizzle {
+    0%   { box-shadow: inset 0 -4px 6px rgba(0,0,0,.5), inset 0 4px 6px rgba(255,255,255,.40), 0 0 20px rgba(255,45,85,.60), 0 0  40px rgba(255,45,85,.20); }
+    20%  { box-shadow: inset 0 -3px 5px rgba(0,0,0,.3), inset 0 4px 8px rgba(255,255,255,.90), 0 0 55px rgba(255,45,85,1.0), 0 0 100px rgba(255,45,85,.70); }
+    55%  { box-shadow: inset 0 -4px 6px rgba(0,0,0,.5), inset 0 4px 6px rgba(255,255,255,.55), 0 0 30px rgba(255,80,100,.90), 0 0  60px rgba(255,45,85,.45); }
+    100% { box-shadow: inset 0 -4px 6px rgba(0,0,0,.5), inset 0 4px 6px rgba(255,255,255,.40), 0 0 20px rgba(255,45,85,.60), 0 0  40px rgba(255,45,85,.20); }
+}
+@keyframes chip-2-sizzle {
+    0%   { box-shadow: inset 0 -4px 6px rgba(0,0,0,.5), inset 0 4px 6px rgba(255,255,255,.50), 0 0 20px rgba(255,231,0,.60), 0 0  40px rgba(255,231,0,.20); }
+    20%  { box-shadow: inset 0 -3px 5px rgba(0,0,0,.3), inset 0 4px 8px rgba(255,255,255,.95), 0 0 55px rgba(255,231,0,1.0), 0 0 100px rgba(255,231,0,.70); }
+    55%  { box-shadow: inset 0 -4px 6px rgba(0,0,0,.5), inset 0 4px 6px rgba(255,255,255,.65), 0 0 30px rgba(255,220,0,.90), 0 0  60px rgba(255,231,0,.45); }
+    100% { box-shadow: inset 0 -4px 6px rgba(0,0,0,.5), inset 0 4px 6px rgba(255,255,255,.50), 0 0 20px rgba(255,231,0,.60), 0 0  40px rgba(255,231,0,.20); }
+}
+
+@keyframes chip-1-breathe {
+    0%, 100% { box-shadow: inset 0 -4px 6px rgba(0,0,0,.5), inset 0 4px 6px rgba(255,255,255,.40), 0 0 18px rgba(255,45,85,.55), 0 0 38px rgba(255,45,85,.18); }
+    50%       { box-shadow: inset 0 -4px 6px rgba(0,0,0,.5), inset 0 4px 6px rgba(255,255,255,.50), 0 0 28px rgba(255,45,85,.85), 0 0 56px rgba(255,45,85,.38); }
+}
+@keyframes chip-2-breathe {
+    0%, 100% { box-shadow: inset 0 -4px 6px rgba(0,0,0,.5), inset 0 4px 6px rgba(255,255,255,.50), 0 0 18px rgba(255,231,0,.55), 0 0 38px rgba(255,231,0,.18); }
+    50%       { box-shadow: inset 0 -4px 6px rgba(0,0,0,.5), inset 0 4px 6px rgba(255,255,255,.60), 0 0 28px rgba(255,231,0,.85), 0 0 56px rgba(255,231,0,.38); }
+}
+
+@keyframes spark-fly {
+    0%   { transform: rotate(var(--angle,0deg)) translateY(0px)   scaleY(1.0); opacity: 1; }
+    100% { transform: rotate(var(--angle,0deg)) translateY(-30px) scaleY(0.1); opacity: 0; }
 }
 
 /* Assessment Badge */

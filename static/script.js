@@ -320,27 +320,53 @@ function getLowestEmptyRow(c) {
     return -1;
 }
 
+// v1.8.0 — 2026-04-11
+// playMove: added chip-fresh class (triggers CSS drop-in + sizzle animations
+// defined in style.css) and calls spawnSparks() for particle burst on placement.
+// chip-fresh is removed after 800 ms so the settled breathing-glow animation
+// can take over without an explicit JS animation loop.
 function playMove(r, c, player) {
-    // Spatial swoosh sound
-    if (typeof AudioEngine !== 'undefined') {
-        AudioEngine.playSwoosh();
-    }
-
-    // Shimmering stardust trail
+    if (typeof AudioEngine !== 'undefined') AudioEngine.playSwoosh();
     createStardustTrail(c, r, player);
 
     board[r][c] = player;
-    moveCount++; // Increment on every play
-    
-    // Clear previous latest piece
+    moveCount++;
+
     document.querySelectorAll('.latest-piece').forEach(el => el.classList.remove('latest-piece'));
-    
+
     const spot = document.getElementById(`spot-${r}-${c}`);
     if (player === 1) spot.classList.add('chip-1');
     else if (player === -1) spot.classList.add('chip-2');
-    
-    // Set as latest piece
-    spot.classList.add('latest-piece');
+
+    spot.classList.add('latest-piece', 'chip-fresh');
+    spawnSparks(spot, player);
+    setTimeout(() => spot.classList.remove('chip-fresh'), 800);
+}
+
+// v1.8.0 — 2026-04-11
+// spawnSparks: .spot has overflow:hidden so pseudo-element sparks would be
+// clipped. Instead we use getBoundingClientRect() to get the viewport centre
+// of the spot, then append position:fixed <div class="spark"> elements directly
+// to <body>. Each spark uses a CSS custom property --angle so the single
+// @keyframes spark-fly rule handles all 8 directions.
+function spawnSparks(spot, player) {
+    const rect  = spot.getBoundingClientRect();
+    const cx    = rect.left + rect.width  / 2;
+    const cy    = rect.top  + rect.height / 2;
+    const color = player === 1 ? '#ff2d55' : '#ffe700';
+    const count = 8;
+    for (let i = 0; i < count; i++) {
+        const spark = document.createElement('div');
+        spark.className = 'spark';
+        spark.style.left = cx + 'px';
+        spark.style.top  = cy + 'px';
+        const angle = (360 / count) * i + (Math.random() * 22 - 11);
+        spark.style.setProperty('--angle', `${angle}deg`);
+        spark.style.background = color;
+        spark.style.boxShadow  = `0 0 4px 1px ${color}`;
+        document.body.appendChild(spark);
+        setTimeout(() => spark.remove(), 620);
+    }
 }
 
 function createStardustTrail(col, endRow, player) {
