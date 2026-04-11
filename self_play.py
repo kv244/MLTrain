@@ -161,7 +161,14 @@ def run_batched_self_play(
                 newly_done.append(i)
             else:
                 chosen_child = roots[i].children.get(move)
-                if chosen_child and chosen_child.children:
+                # v1.8.0 (2026-04-11): removed `and chosen_child.children` guard.
+                # Previously, tree reuse was skipped whenever the child had not yet
+                # been expanded (no .children dict) — i.e., every normal leaf case.
+                # That meant roots[i] was reset to None after almost every move,
+                # throwing away all accumulated visit counts.  Removing the guard
+                # lets an unexpanded child become the new root; _expand_roots_batched
+                # will expand it at the top of the next iteration as expected.
+                if chosen_child:
                     chosen_child.parent = None
                     roots[i] = chosen_child
                 else:

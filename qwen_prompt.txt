@@ -1,8 +1,0 @@
-I have a Python script called visualize.py for inspecting an AlphaZero Connect 4 model. 
-
-Currently, it visualizes:
-1. Start Block Conv2d kernels
-2. ResBlock feature map activations (top 16 channels based on mean activity)
-3. Board state overlaid with Policy probabilities and Value predictions.
-
-What are some OTHER interesting, advanced visualization improvements or new analysis techniques I could add to this script to make it even more insightful for debugging/understanding the neural network? Give me 4-5 creative ideas.

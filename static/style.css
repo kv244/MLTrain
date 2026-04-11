@@ -987,20 +987,6 @@ For now, two prominent corners are very Manga-style. */
         transform: scaleX(0);
     }
 }
-/* Latest Move Halo - Pulsing blue */
-.latest-piece {
-    box-shadow: 0 0 15px #00d2ff, 0 0 30px #00d2ff !important;
-    animation: latest-piece-pulse 2s infinite alternate ease-in-out !important;
-    border: 2px solid #00d2ff !important;
-}
-
-@keyframes latest-piece-pulse {
-    from {
-        box-shadow: 0 0 10px #00d2ff, 0 0 20px #00d2ff;
-        transform: scale(1);
-    }
-    to {
-        box-shadow: 0 0 20px #00d2ff, 0 0 40px #00d2ff;
-        transform: scale(1.05);
-    }
-}
+/* Duplicate .latest-piece block removed (2026-04-11 v1.8.0):
+   the animation:!important here was overriding chip-fresh drop-in/sizzle
+   animations. The canonical .latest-piece rule is defined above (halo-pulse). */

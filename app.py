@@ -473,9 +473,22 @@ def health():
 @app.route("/api/geoip")
 @limiter.limit("10 per minute")
 def geoip():
-    """Proxy geo-IP lookup server-side to avoid CSP/CORS issues."""
+    """Proxy geo-IP lookup server-side to avoid CSP/CORS issues.
+    v1.8.0 (2026-04-11): pass the client IP to the lookup URL so it returns
+    the visitor's country rather than the server's location (which was always US).
+    Falls back to auto-detect for private/loopback IPs (local dev)."""
+    import ipaddress
     try:
-        with urllib.request.urlopen("https://geolocation-db.com/json/", timeout=4) as resp:
+        # Respect reverse-proxy forwarding headers; take the first (original) IP
+        client_ip = request.headers.get('X-Forwarded-For', request.remote_addr or '')
+        client_ip = client_ip.split(',')[0].strip()
+        try:
+            is_private = ipaddress.ip_address(client_ip).is_private
+        except ValueError:
+            is_private = True  # Malformed — fall back to server-side auto-detect
+        url = ("https://geolocation-db.com/json/" if is_private
+               else f"https://geolocation-db.com/json/{client_ip}")
+        with urllib.request.urlopen(url, timeout=4) as resp:
             data = _json.loads(resp.read().decode())
         return jsonify({"country_name": data.get("country_name", "")})
     except Exception:
