@@ -515,11 +515,17 @@ For now, two prominent corners are very Manga-style. */
 @keyframes chip-ring-cw  { to { transform: rotate(360deg);  } }
 @keyframes chip-ring-ccw { to { transform: rotate(-360deg); } }
 
+/* v1.8.0 (2026-04-11): replaced pure-scale pop with a fall + bounce.
+ * --bounce-h1 / --bounce-h2 are set randomly per-piece in playMove() so
+ * every drop lands slightly differently.  Falls from -12 px above its slot,
+ * squishes on impact, bounces up h1 px, lands, micro-bounces h2 px, settles. */
 @keyframes chip-drop-in {
-    0%   { transform: scale(0.1);  opacity: 0.3; }
-    55%  { transform: scale(1.2);               }
-    78%  { transform: scale(0.93);              }
-    100% { transform: scale(1);    opacity: 1;  }
+    0%   { transform: translateY(-12px) scale(0.88); opacity: 0.5; }
+    38%  { transform: translateY(0)     scale(1.10);               } /* impact squish */
+    55%  { transform: translateY(var(--bounce-h1, -7px)) scale(0.97); } /* first bounce */
+    70%  { transform: translateY(0)     scale(1.04);               } /* land */
+    83%  { transform: translateY(var(--bounce-h2, -2px)) scale(1.0); } /* micro-bounce */
+    100% { transform: translateY(0)     scale(1);    opacity: 1;   } /* settle */
 }
 
 @keyframes chip-1-sizzle {

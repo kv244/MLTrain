@@ -474,34 +474,16 @@ def health():
 @app.route("/api/geoip")
 @limiter.limit("10 per minute")
 def geoip():
-    """Proxy geo-IP lookup server-side to avoid CSP/CORS issues.
-    v1.8.0 (2026-04-11): pass the client IP to the lookup URL so it returns
-    the visitor's country rather than the server's location (which was always US).
-    Falls back to auto-detect for private/loopback IPs (local dev)."""
-    import ipaddress
+    """Return wallpaper renewal countdown only.
+    Geolocation is now done browser-side (geolocation-db.com added to CSP
+    connect-src) so the lookup uses the client's real IP, not the server's."""
     try:
-        # Respect reverse-proxy forwarding headers; take the first (original) IP
-        client_ip = request.headers.get('X-Forwarded-For', request.remote_addr or '')
-        client_ip = client_ip.split(',')[0].strip()
-        try:
-            is_private = ipaddress.ip_address(client_ip).is_private
-        except ValueError:
-            is_private = True  # Malformed — fall back to server-side auto-detect
-        url = ("https://geolocation-db.com/json/" if is_private
-               else f"https://geolocation-db.com/json/{client_ip}")
-        with urllib.request.urlopen(url, timeout=4) as resp:
-            data = _json.loads(resp.read().decode())
-        # Compute days remaining until the 7-day wallpaper renewal
-        try:
-            mtime = background_manager.BG_PATH.stat().st_mtime
-            age_days = (time.time() - mtime) / 86400
-            days_left = max(0, int(math.ceil(7 - age_days)))
-        except Exception:
-            days_left = None
-        return jsonify({"country_name": data.get("country_name", ""),
-                        "wallpaper_days_left": days_left})
+        mtime = background_manager.BG_PATH.stat().st_mtime
+        age_days = (time.time() - mtime) / 86400
+        days_left = max(0, int(math.ceil(7 - age_days)))
     except Exception:
-        return jsonify({"country_name": "", "wallpaper_days_left": None}), 200
+        days_left = None
+    return jsonify({"wallpaper_days_left": days_left})
 
 # NEW: Dynamic Environment Background Refresh
 @app.route("/api/admin/refresh_background")
@@ -523,7 +505,15 @@ def refresh_background():
 # FIX 9: security response headers
 @app.after_request
 def set_security_headers(response):
-    response.headers['Content-Security-Policy'] = "default-src 'self'; font-src 'self' https://fonts.googleapis.com https://fonts.gstatic.com; style-src 'self' https://fonts.googleapis.com; script-src 'self'"
+    # connect-src: allow direct browser fetch to geolocation-db.com so the
+    # client's real IP is used (server-side proxy always resolves to server IP).
+    response.headers['Content-Security-Policy'] = (
+        "default-src 'self'; "
+        "font-src 'self' https://fonts.googleapis.com https://fonts.gstatic.com; "
+        "style-src 'self' https://fonts.googleapis.com; "
+        "script-src 'self'; "
+        "connect-src 'self' https://geolocation-db.com"
+    )
     response.headers['X-Content-Type-Options'] = 'nosniff'
     response.headers['X-Frame-Options'] = 'DENY'
     response.headers['Referrer-Policy'] = 'strict-origin-when-cross-origin'

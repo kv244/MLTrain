@@ -338,6 +338,9 @@ function playMove(r, c, player) {
     if (player === 1) spot.classList.add('chip-1');
     else if (player === -1) spot.classList.add('chip-2');
 
+    // Random bounce heights so each drop lands slightly differently
+    spot.style.setProperty('--bounce-h1', `-${(5 + Math.random() * 8).toFixed(1)}px`);
+    spot.style.setProperty('--bounce-h2', `-${(1 + Math.random() * 4).toFixed(1)}px`);
     spot.classList.add('latest-piece', 'chip-fresh');
     spawnSparks(spot, player);
     setTimeout(() => spot.classList.remove('chip-fresh'), 800);
@@ -670,35 +673,43 @@ function endGame(message, winningLine = null) {
     }
 }
 
+// v1.8.0 (2026-04-11): geolocation now done browser-side so the lookup uses
+// the client's real IP (server proxy always resolved to the server's US IP).
+// geolocation-db.com is whitelisted in the CSP connect-src header.
+// sessionStorage guard removed — toast shows on every page load (5 s, auto-dismiss).
 async function initWelcomeMessage() {
-    const welcomeShown = sessionStorage.getItem('welcomeToastShown');
-    if (welcomeShown) return;
-
     const toast = document.getElementById('welcomeToast');
     const msgEl = document.getElementById('welcomeMessage');
     if (!toast || !msgEl) return;
 
-    // Show initial trace message
     toast.classList.remove('hidden');
 
-    try {
-        const response = await fetch('/api/geoip');
-        if (!response.ok) throw new Error("Geo-IP lookup failed");
+    // Kick off both requests in parallel
+    const [geoRes, infoRes] = await Promise.allSettled([
+        fetch('https://geolocation-db.com/json/'),
+        fetch('/api/geoip')
+    ]);
 
-        const data = await response.json();
-        const country = data.country_name || "the physical realm";
-        const daysLeft = data.wallpaper_days_left;
-        const wallpaperNote = (daysLeft !== null && daysLeft !== undefined)
-            ? ` · wallpaper renews in ${daysLeft} day${daysLeft === 1 ? '' : 's'}`
-            : '';
-
-        msgEl.innerText = `Thank you for joining me from ${country}!${wallpaperNote}`;
-    } catch (e) {
-        console.warn("Welcome Geo-IP failed:", e);
-        msgEl.innerText = "Thank you for joining me on the grid!";
+    let country = "the physical realm";
+    if (geoRes.status === 'fulfilled' && geoRes.value.ok) {
+        try {
+            const geo = await geoRes.value.json();
+            country = geo.country_name || country;
+        } catch (_) {}
     }
 
-    sessionStorage.setItem('welcomeToastShown', 'true');
+    let wallpaperNote = '';
+    if (infoRes.status === 'fulfilled' && infoRes.value.ok) {
+        try {
+            const info = await infoRes.value.json();
+            const d = info.wallpaper_days_left;
+            if (d !== null && d !== undefined) {
+                wallpaperNote = ` · wallpaper renews in ${d} day${d === 1 ? '' : 's'}`;
+            }
+        } catch (_) {}
+    }
+
+    msgEl.innerText = `Thank you for joining me from ${country}!${wallpaperNote}`;
 
     // Auto-dismiss after 5 seconds to match progress bar
     setTimeout(() => {
