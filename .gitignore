@@ -20,6 +20,10 @@ dist/
 # Environment variables
 .env
 
+# SSH keys — never commit private keys; use GitHub Actions secrets instead
+id_*
+*.pem
+
 # Logs and Data
 *.csv
 *.log
