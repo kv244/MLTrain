@@ -687,8 +687,12 @@ async function initWelcomeMessage() {
 
         const data = await response.json();
         const country = data.country_name || "the physical realm";
-        
-        msgEl.innerText = `Thank you for joining me from ${country}!`;
+        const daysLeft = data.wallpaper_days_left;
+        const wallpaperNote = (daysLeft !== null && daysLeft !== undefined)
+            ? ` · wallpaper renews in ${daysLeft} day${daysLeft === 1 ? '' : 's'}`
+            : '';
+
+        msgEl.innerText = `Thank you for joining me from ${country}!${wallpaperNote}`;
     } catch (e) {
         console.warn("Welcome Geo-IP failed:", e);
         msgEl.innerText = "Thank you for joining me on the grid!";

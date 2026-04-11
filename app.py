@@ -2,6 +2,7 @@ import os
 import glob
 import re
 import time
+import math
 import csv
 import torch
 import numpy as np
@@ -490,9 +491,17 @@ def geoip():
                else f"https://geolocation-db.com/json/{client_ip}")
         with urllib.request.urlopen(url, timeout=4) as resp:
             data = _json.loads(resp.read().decode())
-        return jsonify({"country_name": data.get("country_name", "")})
+        # Compute days remaining until the 7-day wallpaper renewal
+        try:
+            mtime = background_manager.BG_PATH.stat().st_mtime
+            age_days = (time.time() - mtime) / 86400
+            days_left = max(0, int(math.ceil(7 - age_days)))
+        except Exception:
+            days_left = None
+        return jsonify({"country_name": data.get("country_name", ""),
+                        "wallpaper_days_left": days_left})
     except Exception:
-        return jsonify({"country_name": ""}), 200
+        return jsonify({"country_name": "", "wallpaper_days_left": None}), 200
 
 # NEW: Dynamic Environment Background Refresh
 @app.route("/api/admin/refresh_background")
