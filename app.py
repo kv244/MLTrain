@@ -25,7 +25,8 @@ VERSION = "1.7.0"
 LAST_COMMIT = "2026-04-10 00:15 UTC"
 
 from mcts import Connect4, run_mcts_simulations
-import background_manager # NEW: Dynamic Environment manager
+import background_manager
+import bigquery_tracker
 
 app = Flask(__name__)
 app.config['MAX_CONTENT_LENGTH'] = 64 * 1024  # FIX 8: 64 KB limit
@@ -151,23 +152,47 @@ def get_info():
     """Returns runtime hardware info to the frontend."""
     return jsonify({"device": GLOBAL_OV_DEVICE})
 
+@app.route("/api/session", methods=["POST"])
+@limiter.limit("30 per minute")
+def log_session():
+    """Record a page-load visit in BigQuery.
+    Body: { "country": "<string>" }  (country resolved by client-side geo-IP)
+    Performs INSERT for new IPs, UPDATE for returning visitors."""
+    data    = request.json or {}
+    country = data.get("country", "")
+    ip      = request.remote_addr
+    bigquery_tracker.record_session(ip, country)
+    return jsonify({"success": True})
+
+
 @app.route("/api/game_end", methods=["POST"])
 def log_game_end():
-    """Receives and logs game outcome telemtry."""
+    """Receives and logs game outcome telemetry to CSV and BigQuery.
+    Body: { "winner": "human"|"ai"|"draw", "model": "<str>", "moves": <int>,
+            "country": "<str>" }"""
     data = request.json
-    if not data: return jsonify({"error": "Missing or invalid JSON"}), 400 # FIX 1
-    winner = data.get("winner", "unknown")
-    model_version = data.get("model", "unknown")
-    
+    if not data:
+        return jsonify({"error": "Missing or invalid JSON"}), 400
+    winner        = data.get("winner", "unknown")
+    model_version = data.get("model",   "unknown")
+    moves         = data.get("moves",   0)
+    country       = data.get("country", "")
+    ip            = request.remote_addr
+
+    # CSV log (existing behaviour)
     results_file = os.environ.get("RESULTS_LOG_PATH", "game_results.csv")
-    file_exists = os.path.isfile(results_file)
+    file_exists  = os.path.isfile(results_file)
     with _csv_lock:
         with open(results_file, mode='a', newline='') as csv_file:
             writer = csv.writer(csv_file)
             if not file_exists:
-                writer.writerow(["timestamp", "model", "winner"])
-            writer.writerow([time.strftime("%Y-%m-%dT%H:%M:%S"), model_version, winner])
-        
+                writer.writerow(["timestamp", "model", "winner", "moves"])
+            writer.writerow([time.strftime("%Y-%m-%dT%H:%M:%S"),
+                             model_version, winner, moves])
+
+    # BigQuery — fire-and-forget in background thread
+    bigquery_tracker.record_game(ip, winner, moves)
+
     return jsonify({"success": True})
 
 @app.route("/api/models")
@@ -536,6 +561,9 @@ if __name__ == "__main__":
     if initial_models:
         print(f"Pre-loading latest checkpoint for optimization: {initial_models[0]}")
         get_model(initial_models[0])
+
+    # BigQuery analytics
+    bigquery_tracker.init()
 
     # Dynamic Environment: Startup check for stale background
     if background_manager.is_background_stale():

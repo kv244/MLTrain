@@ -6,7 +6,10 @@ let boardHistory = []; // Step 5: Undo stack
 let currentPlayer = 1; // 1 = Human, -1 = AI (default if AI plays first)
 let humanPlayer = 1;
 let gameOver = false;
-let moveCount = 0; // NEW: Track total moves
+let moveCount = 0; // Track total moves
+
+// Session metadata (populated by initWelcomeMessage after geo-IP resolves)
+let sessionCountry = "";
 
 // LocalStorage Persistence
 let stats = JSON.parse(localStorage.getItem("c4_stats")) || { games: 0, player: 0, ai: 0 };
@@ -666,8 +669,10 @@ function endGame(message, winningLine = null) {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
             body: JSON.stringify({
-                winner: winnerId,
-                model: _modelSelect.value || "unknown"
+                winner:  winnerId,
+                model:   _modelSelect.value || "unknown",
+                moves:   moveCount,
+                country: sessionCountry
             })
         }).catch(e => console.error("Telemetry log failed:", e));
     }
@@ -695,8 +700,16 @@ async function initWelcomeMessage() {
         try {
             const geo = await geoRes.value.json();
             country = geo.country_name || country;
+            sessionCountry = geo.country_name || "";
         } catch (_) {}
     }
+
+    // Record session visit in BigQuery (INSERT new IP / UPDATE returning)
+    fetch('/api/session', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ country: sessionCountry })
+    }).catch(() => {});
 
     let wallpaperNote = '';
     if (infoRes.status === 'fulfilled' && infoRes.value.ok) {
