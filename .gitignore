@@ -20,6 +20,9 @@ dist/
 # Environment variables
 .env
 
+# Claude Code settings
+.claude/
+
 # SSH keys — never commit private keys; use GitHub Actions secrets instead
 id_*
 *.pem
