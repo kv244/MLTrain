@@ -123,6 +123,31 @@
 <h1>⬡ Connect 4 AI — Analytics</h1>
 <p class="subtitle">Live data from BigQuery · auto-fetched on each page load</p>
 
+<p style="margin-top:1rem;">
+    <button onclick="refreshBackground()" style="padding:8px 18px; background:#0ff3; border:1px solid #0ff8;
+        color:#0ff; border-radius:6px; cursor:pointer; font-size:13px;">
+        ↻ Regenerate Background Image
+    </button>
+    <span id="bg-status" style="margin-left:12px; font-size:13px; color:#aaa;"></span>
+</p>
+
+<script>
+async function refreshBackground() {
+    const btn = document.querySelector('button[onclick="refreshBackground()"]');
+    const status = document.getElementById('bg-status');
+    btn.disabled = true;
+    status.textContent = 'Generating… (this takes ~30s)';
+    try {
+        const res = await fetch(`/api/admin/refresh_background?auth={{ admin_token }}`);
+        const data = await res.json();
+        status.textContent = res.ok ? '✓ Background updated!' : '✗ ' + data.message;
+    } catch (e) {
+        status.textContent = '✗ Request failed.';
+    }
+    btn.disabled = false;
+}
+</script>
+
 {% if error %}
 <div class="error-box">⚠ BigQuery error: {{ error }}</div>
 {% endif %}

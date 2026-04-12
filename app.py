@@ -618,7 +618,8 @@ def admin_dashboard(token):
         error = "BigQuery not configured (GCP_PROJECT_ID missing)."
 
     return render_template("admin.html",
-                           rows=rows, daily=daily, totals=totals, error=error)
+                           rows=rows, daily=daily, totals=totals, error=error,
+                           admin_token=token)
 
 
 @app.route("/api/admin/refresh_background")
