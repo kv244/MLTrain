@@ -287,6 +287,8 @@ function showAssessment(data) {
     
     if (typeof AudioEngine !== 'undefined' && AudioEngine.isPlaying) {
         AudioEngine.setIntensity(data.score);
+        // Menace sting: position is critical (score 1–2 = very bad for the moving player)
+        if (data.score <= 2) AudioEngine.playMenace();
     }
 
     clearBestMoveHint();
@@ -528,8 +530,14 @@ async function triggerAiMove() {
             return;
         }
 
-        // Step 3: Show heatmap
-        if (data.probs) showHeatmap(data.probs);
+        // Step 3: Show heatmap; trigger menace if AI is highly confident
+        if (data.probs) {
+            showHeatmap(data.probs);
+            if (typeof AudioEngine !== 'undefined' && AudioEngine.isPlaying &&
+                Math.max(...data.probs) > 0.65) {
+                AudioEngine.playMenace();
+            }
+        }
 
         playMove(row, col, currentPlayer);
 

@@ -285,6 +285,61 @@ const AudioEngine = {
         this.prophetFilter.frequency.setTargetAtTime(freq, this.ctx.currentTime, 0.5);
     },
 
+    // ── Menace sting ─────────────────────────────────────────────────────
+    // Low tritone stab (E2 + A#2 sawtooth) + deep tremolo rumble.
+    // Fires at most once per 4 seconds to avoid spam.
+    _lastMenace: 0,
+
+    playMenace() {
+        if (!this.ctx) this.init();
+        if (this.ctx.state === 'suspended') this.ctx.resume();
+
+        const now = this.ctx.currentTime;
+        // 4-second cooldown
+        if (now - this._lastMenace < 4) return;
+        this._lastMenace = now;
+
+        // Tritone stab: E2 (82.4 Hz) + A#2 (116.5 Hz), sawtooth
+        [82.4, 116.5].forEach(freq => {
+            const osc  = this.ctx.createOscillator();
+            const gain = this.ctx.createGain();
+            osc.type = 'sawtooth';
+            osc.frequency.value = freq;
+            gain.gain.setValueAtTime(0, now);
+            gain.gain.linearRampToValueAtTime(0.18, now + 0.04);
+            gain.gain.exponentialRampToValueAtTime(0.0001, now + 1.2);
+            osc.connect(gain);
+            gain.connect(this.prophetFilter);
+            osc.start(now);
+            osc.stop(now + 1.3);
+        });
+
+        // Deep tremolo rumble: A1 (55 Hz) amplitude-modulated at 8 Hz
+        const rumble = this.ctx.createOscillator();
+        const lfo    = this.ctx.createOscillator();
+        const lfoAmp = this.ctx.createGain();
+        const env    = this.ctx.createGain();
+
+        rumble.type = 'sine';
+        rumble.frequency.value = 55;
+
+        lfo.type = 'sine';
+        lfo.frequency.value = 8;           // 8 Hz tremolo
+        lfoAmp.gain.value = 0.08;          // modulation depth
+
+        env.gain.setValueAtTime(0, now);
+        env.gain.linearRampToValueAtTime(0.14, now + 0.08);
+        env.gain.exponentialRampToValueAtTime(0.0001, now + 1.5);
+
+        lfo.connect(lfoAmp);
+        lfoAmp.connect(env.gain);          // LFO modulates envelope
+        rumble.connect(env);
+        env.connect(this.ctx.destination);
+
+        lfo.start(now);    lfo.stop(now + 1.6);
+        rumble.start(now); rumble.stop(now + 1.6);
+    },
+
     // Win effects (called from win-effects.js)
     glitchWin() {
         if (!this.ctx || !this.isPlaying) return;
