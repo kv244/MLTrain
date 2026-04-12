@@ -32,6 +32,9 @@ id_*
 *.log
 
 # Diagnostic Artifacts
-*.png
 viz_*/
 eval_models.py
+
+# PNG files except the OG share preview
+*.png
+!static/og-preview.png
