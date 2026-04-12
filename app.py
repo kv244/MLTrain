@@ -217,8 +217,9 @@ def get_move():
     if not data: return jsonify({"error": "Missing or invalid JSON"}), 400 # FIX 1
 
     checkpoint_name = data.get("model", "")
-    board_state = data.get("board", []) 
-    current_player = data.get("current_player", -1) 
+    board_state = data.get("board", [])
+    current_player = data.get("current_player", -1)
+    difficulty = data.get("difficulty", "hard").lower()
 
     # FIX 4: Validate current_player
     if current_player not in (-1, 1):
@@ -293,6 +294,14 @@ def get_move():
                 print(f"[Adaptive] Decided position (q={root_val:.2f}). Reducing sims to {simulations}")
         else:
             print("[Adaptive] Tactical Short-Circuit detected. Bypassing simulation boost.")
+
+    # Difficulty: random move chance (easy=2/3, medium=1/3, hard=0)
+    random_chance = {"easy": 2/3, "medium": 1/3}.get(difficulty, 0)
+    if random_chance > 0 and np.random.random() < random_chance:
+        valid_cols = [c for c in range(7) if game.board[0][c] == 0]
+        best_move = int(np.random.choice(valid_cols))
+        print(f"[Difficulty:{difficulty}] Random move → col {best_move}")
+        return jsonify({"move": best_move, "mcts_probs": [0.0]*7, "winning_cells": []})
 
     print(f"Evaluating board using {checkpoint_name} for player {current_player} (sims={simulations})...")
 

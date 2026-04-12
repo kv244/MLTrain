@@ -20,6 +20,9 @@ function updateStatsUI() {
     document.getElementById('statAiWins').innerText = stats.ai;
 }
 
+// Difficulty → simulation count mapping
+const DIFF_SIMS = { easy: 100, medium: 800, hard: 2000 };
+
 // DOM Elements
 const _board = document.getElementById('c4Board');
 const _modelSelect = document.getElementById('modelSelect');
@@ -214,8 +217,8 @@ async function handleColumnClick(c) {
 }
 
 async function fetchAssessment(prevBoard, move, movingPlayer) { 
-    const sims = parseInt(_difficultySelect.value, 10);
-    if (isNaN(sims) || sims < 1) return null;
+    const sims = DIFF_SIMS[_difficultySelect.value] || 800;
+    if (!sims) return null;
 
     try {
         const res = await fetch('/api/assess', {
@@ -424,7 +427,6 @@ async function getHint() {
     _btnHint.innerText = "Thinking...";
     
     try {
-        const sims = parseInt(_difficultySelect.value, 10);
         const res = await fetch('/api/move', { // Using move endpoint for "pure" AI best move
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
@@ -432,7 +434,8 @@ async function getHint() {
                 model: _modelSelect.value,
                 board: board,
                 current_player: humanPlayer,
-                simulations: sims
+                simulations: DIFF_SIMS[_difficultySelect.value] || 800,
+                difficulty: 'hard'  // hints always use full AI
             })
         });
         
@@ -492,18 +495,19 @@ function renderBoard() {
 }
 
 async function triggerAiMove() {
-    const sims = parseInt(_difficultySelect.value, 10);
-    if (isNaN(sims) || sims < 1) return;
+    const difficulty = _difficultySelect.value;
+    const sims = DIFF_SIMS[difficulty] || 800;
 
     _board.classList.add('disabled');
     updateActionButtons();
-    
+
     try {
         const payload = {
             model: _modelSelect.value,
             board: board,
             current_player: currentPlayer,
-            simulations: sims 
+            simulations: sims,
+            difficulty: difficulty
         };
 
         const res = await fetch('/api/move', {
@@ -760,7 +764,11 @@ async function initWelcomeMessage() {
         } catch (_) {}
     }
 
-    msgEl.innerText = `Thank you for joining me from ${country}!${globalNote}${wallpaperNote}`;
+    msgEl.innerHTML =
+        `Thank you for joining me from ${country}!${globalNote}${wallpaperNote}` +
+        `<br><span style="font-size:11px;opacity:0.75;">` +
+        `Easy: mostly random &nbsp;·&nbsp; Medium: mixed AI &nbsp;·&nbsp; Hard: full strength — likely ends in a draw` +
+        `</span>`;
 
     // Auto-dismiss after 5 seconds to match progress bar
     setTimeout(() => {
