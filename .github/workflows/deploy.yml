@@ -43,7 +43,8 @@ jobs:
             mkdir -p ~/backups
             TIMESTAMP=$(date +%Y%m%d_%H%M%S)
             tar -czf ~/backups/mltrain_backup_${TIMESTAMP}.tar.gz . \
-              --exclude="./.git" --exclude="./.venv" --exclude="./__pycache__" --exclude="./*.pt" \
+              --exclude="./.git" --exclude="./.venv" --exclude="./.venv.backup" \
+              --exclude="./__pycache__" --exclude="./*.pt" --exclude="./*.pt.*" \
               --exclude="./*.onnx" --exclude="./*.onnx.data" || true
 
             # Keep only the 3 most recent backups
