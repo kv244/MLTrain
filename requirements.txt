@@ -11,6 +11,7 @@ torch
 scipy
 flask
 google-cloud-aiplatform
+google-genai
 google-cloud-bigquery
 matplotlib
 Pillow

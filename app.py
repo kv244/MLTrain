@@ -16,7 +16,8 @@ from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
 from werkzeug.middleware.proxy_fix import ProxyFix
 import openvino as ov
-import google.generativeai as genai
+from google import genai
+from google.genai import types as genai_types
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -50,6 +51,10 @@ if LIMITER_STORAGE.startswith("memory://"):
         "This does not work correctly with multi-worker Gunicorn. "
         "Set LIMITER_STORAGE_URI to a Redis URL for production."
     )
+
+# Initialise BigQuery tracker at module load time so it runs under gunicorn.
+# (Previously inside __main__ only — invisible to gunicorn workers.)
+bigquery_tracker.init()
 
 @app.errorhandler(429)
 def ratelimit_handler(e):
@@ -332,13 +337,9 @@ def get_move():
         "winning_cells": winning_cells
     })
 
-# Configure Gemini
+# Configure Gemini (google.genai SDK — replaces deprecated google.generativeai)
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
-if GEMINI_API_KEY:
-    genai.configure(api_key=GEMINI_API_KEY)
-    gemini_model = genai.GenerativeModel('gemini-2.0-flash')
-else:
-    gemini_model = None
+gemini_client  = genai.Client(api_key=GEMINI_API_KEY) if GEMINI_API_KEY else None
 
 @app.route("/api/assess", methods=["POST"])
 def assess_move():
@@ -426,7 +427,7 @@ def assess_move():
     
     best_move = int(np.argmax(mcts_probs))
     quote = "Analysis complete."
-    if gemini_model:
+    if gemini_client:
         try:
             move_quality_pct = int(round(p_move / max_p * 100)) if max_p > 0 else 0
             same_as_best = (move == best_move)
@@ -445,9 +446,12 @@ def assess_move():
                 f"Tone guide: 1-2 stars (mocking/cold), 3-4 stars (neutral/impressed), 5 stars (fascinated/alarmed). "
                 f"Use cyberpunk slang. Output ONLY the requested format."
             )
-            response = gemini_model.generate_content(
-                prompt,
-                request_options={"timeout": 8}
+            response = gemini_client.models.generate_content(
+                model="gemini-2.0-flash",
+                contents=prompt,
+                config=genai_types.GenerateContentConfig(
+                    http_options=genai_types.HttpOptions(timeout=8000)
+                )
             )
             responseText = response.text
             
@@ -629,9 +633,6 @@ if __name__ == "__main__":
     if initial_models:
         print(f"Pre-loading latest checkpoint for optimization: {initial_models[0]}")
         get_model(initial_models[0])
-
-    # BigQuery analytics
-    bigquery_tracker.init()
 
     # Dynamic Environment: Startup check for stale background
     if background_manager.is_background_stale():

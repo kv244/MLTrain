@@ -3,7 +3,7 @@ import time
 import datetime
 import pathlib
 import threading
-import google.generativeai as genai
+from google import genai
 import vertexai
 from vertexai.vision_models import ImageGenerationModel
 from dotenv import load_dotenv
@@ -40,17 +40,17 @@ def update_background():
     tmp_path = None
     try:
         # 1. Generate a vivid prompt via Gemini
-        genai.configure(api_key=GEMINI_API_KEY)
-        model = genai.GenerativeModel('gemini-2.0-flash')
-        
+        client = genai.Client(api_key=GEMINI_API_KEY)
         system_prompt = (
             "You are a creative prompt engineer for an image generation model. "
             "Generate a highly detailed, cinematic prompt for a cyberpunk-themed city background for a Connect 4 board game. "
             "The prompt should focus on atmospheric lighting (neon cyan, magenta, lime), futuristic urban architecture, "
             "and a clean, wide-angle perspective. Output ONLY the image prompt text."
         )
-        
-        response = model.generate_content(system_prompt)
+        response = client.models.generate_content(
+            model="gemini-2.0-flash",
+            contents=system_prompt
+        )
         image_prompt = response.text.strip()
         print(f"[BackgroundManager] Gemini prompt: {image_prompt}")
 
