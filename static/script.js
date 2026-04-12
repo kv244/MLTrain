@@ -21,7 +21,7 @@ function updateStatsUI() {
 }
 
 // Difficulty → simulation count mapping
-const DIFF_SIMS = { easy: 100, medium: 800, hard: 2000 };
+const DIFF_SIMS = { easy: 100, medium: 400, hard: 800 };
 
 const DIFF_DESC = {
     easy:   'Easy — AI plays mostly random moves. Hints shown automatically. Great for beginners.',
@@ -157,6 +157,7 @@ function startGame(human_role) {
     _boardArea.classList.remove('hidden');
     _btnReset.classList.add('hidden');
     _board.classList.remove('disabled');
+    _difficultySelect.disabled = true;
     const kofi = document.getElementById('kofi-container');
     if (kofi) kofi.style.display = 'none';
 
@@ -684,6 +685,7 @@ function updateActionButtons() {
 function endGame(message, winningLine = null) {
     gameOver = true;
     _board.classList.add('disabled');
+    _difficultySelect.disabled = false;
     updateActionButtons();
     
     _badge.innerText = `${message} in ${moveCount} moves`;

@@ -139,6 +139,10 @@ label {
     appearance: none;
     outline: none;
 }
+.styled-select:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+}
 
 .slider-wrapper {
     display: flex;

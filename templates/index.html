@@ -165,22 +165,13 @@
     <script src="{{ url_for('static', filename='win-effects.js') }}"></script>
     <script src="{{ url_for('static', filename='script.js') }}"></script>
 
-    <!-- Facebook JS SDK -->
-    <div id="fb-root"></div>
-    <script async defer src="https://connect.facebook.net/en_US/sdk.js"></script>
     <script>
-        window.fbAsyncInit = function() {
-            FB.init({ appId: '1437803187528311', version: 'v19.0' });
-        };
         function fbShare() {
-            const btn = document.getElementById('fb-share-btn');
-            const quote = btn.dataset.quote || 'I played Connect 4 against an AlphaZero AI at c4star.com!';
-            FB.ui({
-                method:  'share',
-                href:    'https://c4star.com',
-                quote:   quote,
-                hashtag: '#Connect4AI'
-            });
+            window.open(
+                'https://www.facebook.com/sharer/sharer.php?u=https%3A%2F%2Fc4star.com',
+                'fb-share',
+                'width=600,height=500,resizable=yes,scrollbars=yes'
+            );
         }
     </script>
 </body>

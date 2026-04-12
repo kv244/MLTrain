@@ -20,7 +20,7 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-VERSION = "1.9.0"
+VERSION = "1.9.1"
 LAST_COMMIT = "2026-04-10 00:15 UTC"
 
 from mcts import Connect4, run_mcts_simulations
@@ -227,12 +227,12 @@ def get_move():
     if current_player not in (-1, 1):
         return jsonify({"error": "Invalid current_player"}), 400
 
-    # FIX 3: safe int coercion
+    # FIX 3: safe int coercion — hard cap at 1200 to prevent gunicorn worker timeout
     try:
-        simulations = max(1, min(int(data.get("simulations", 800)), 5000))
+        simulations = max(1, min(int(data.get("simulations", 800)), 1200))
     except (TypeError, ValueError):
         return jsonify({"error": "Invalid simulations value"}), 400
-    
+
     checkpoint = _resolve_checkpoint(checkpoint_name)
     if not checkpoint:
         return jsonify({"error": "Invalid model"}), 400
@@ -288,7 +288,7 @@ def get_move():
             root_val = root.q_value
             # If position is contested/complex, boost the budget
             if abs(root_val) < 0.4:
-                simulations = min(5000, int(simulations * 1.5))
+                simulations = min(1200, int(simulations * 1.5))
                 print(f"[Adaptive] Contested position (q={root_val:.2f}). Boosting sims to {simulations}")
             # If position is nearly decided, reduce the budget
             elif abs(root_val) > 0.85:
@@ -372,9 +372,9 @@ def assess_move():
     if current_player not in (-1, 1):
         return jsonify({"error": "Invalid current_player"}), 400
 
-    # FIX 3: safe int coercion
+    # FIX 3: safe int coercion — hard cap at 1200 to prevent gunicorn worker timeout
     try:
-        simulations = max(1, min(int(data.get("simulations", 800)), 5000))
+        simulations = max(1, min(int(data.get("simulations", 800)), 1200))
     except (TypeError, ValueError):
         return jsonify({"error": "Invalid simulations value"}), 400
 
@@ -669,9 +669,8 @@ def set_security_headers(response):
         "default-src 'self'; "
         "font-src 'self' https://fonts.googleapis.com https://fonts.gstatic.com; "
         "style-src 'self' https://fonts.googleapis.com; "
-        "script-src 'self' https://connect.facebook.net; "
-        "connect-src 'self' https://geolocation-db.com https://graph.facebook.com; "
-        "frame-src https://www.facebook.com"
+        "script-src 'self'; "
+        "connect-src 'self' https://geolocation-db.com"
     )
     response.headers['X-Content-Type-Options'] = 'nosniff'
     response.headers['X-Frame-Options'] = 'DENY'
