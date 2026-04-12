@@ -582,17 +582,20 @@ def admin_dashboard(token):
             rows = list(client.query(f"""
                 SELECT
                     ip_address,
-                    COALESCE(country, 'Unknown')           AS country,
-                    DATE(first_seen)                       AS first_day,
-                    DATE(last_seen)                        AS last_day,
+                    COALESCE(country, 'Unknown')                AS country,
+                    DATE(first_seen)                            AS first_day,
+                    DATE(last_seen)                             AS last_day,
                     total_visits,
                     total_games,
                     player_wins,
                     ai_wins,
                     draws,
                     total_moves,
+                    COALESCE(easy_games,   0)                   AS easy_games,
+                    COALESCE(medium_games, 0)                   AS medium_games,
+                    COALESCE(hard_games,   0)                   AS hard_games,
                     ROUND(SAFE_DIVIDE(player_wins,
-                          NULLIF(total_games, 0)) * 100, 1) AS win_pct
+                          NULLIF(total_games, 0)) * 100, 1)    AS win_pct
                 FROM `{ref}`
                 ORDER BY last_seen DESC
             """).result())
@@ -617,8 +620,11 @@ def admin_dashboard(token):
                     SUM(total_games)  AS total_games,
                     SUM(player_wins)  AS player_wins,
                     SUM(ai_wins)      AS ai_wins,
-                    SUM(draws)        AS draws,
-                    SUM(total_moves)  AS total_moves
+                    SUM(draws)                       AS draws,
+                    SUM(total_moves)                 AS total_moves,
+                    SUM(COALESCE(easy_games,   0))   AS easy_games,
+                    SUM(COALESCE(medium_games, 0))   AS medium_games,
+                    SUM(COALESCE(hard_games,   0))   AS hard_games
                 FROM `{ref}`
             """).result())
             totals = dict(t[0]) if t else {}
