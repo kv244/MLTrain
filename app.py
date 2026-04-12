@@ -663,8 +663,9 @@ def set_security_headers(response):
         "default-src 'self'; "
         "font-src 'self' https://fonts.googleapis.com https://fonts.gstatic.com; "
         "style-src 'self' https://fonts.googleapis.com; "
-        "script-src 'self'; "
-        "connect-src 'self' https://geolocation-db.com"
+        "script-src 'self' https://connect.facebook.net; "
+        "connect-src 'self' https://geolocation-db.com https://graph.facebook.com; "
+        "frame-src https://www.facebook.com"
     )
     response.headers['X-Content-Type-Options'] = 'nosniff'
     response.headers['X-Frame-Options'] = 'DENY'

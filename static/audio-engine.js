@@ -99,30 +99,63 @@ const AudioEngine = {
     },
 
     // ── Move sound (on every piece drop) ────────────────────────────────
+    // row: 0 = top of board (light fall), 5 = bottom (heavy thud).
+    // Higher rows → lighter whoosh (higher pitch, shorter decay).
+    // Lower rows → deeper whoosh + heavier sub-thud, longer decay.
+    // ±10 % pitch jitter makes every drop feel slightly unique.
 
-    playSwoosh() {
+    playSwoosh(row) {
         if (!this.ctx) this.init();
         if (this.ctx.state === 'suspended') this.ctx.resume();
+
+        // row 0 (top) → t=0.0, row 5 (bottom) → t=1.0
+        const t = Math.min(Math.max((row || 0) / 5, 0), 1);
+        // ±10 % pitch randomness
+        const jitter = 0.9 + Math.random() * 0.2;
+
+        // Whoosh: frequency sweeps from high to low; bottom rows start lower
+        const freqStart = jitter * (1100 - t * 500);   // 1100 → 600 Hz range start
+        const freqEnd   = jitter * (220  - t * 130);   //  220 →  90 Hz range end
+        const duration  = 0.18 + t * 0.12;             // 0.18 → 0.30 s
 
         const noise  = this.ctx.createBufferSource();
         const filter = this.ctx.createBiquadFilter();
         const gain   = this.ctx.createGain();
 
-        noise.buffer     = this.noiseBuffer;
-        filter.type      = 'bandpass';
-        filter.Q.value   = 1.8;
-        filter.frequency.setValueAtTime(900, this.ctx.currentTime);
-        filter.frequency.exponentialRampToValueAtTime(180, this.ctx.currentTime + 0.18);
+        noise.buffer   = this.noiseBuffer;
+        filter.type    = 'bandpass';
+        filter.Q.value = 1.5 + t * 0.8;               // warmer Q on lower rows
+        filter.frequency.setValueAtTime(freqStart, this.ctx.currentTime);
+        filter.frequency.exponentialRampToValueAtTime(freqEnd, this.ctx.currentTime + duration);
 
         gain.gain.setValueAtTime(0, this.ctx.currentTime);
-        gain.gain.linearRampToValueAtTime(0.16, this.ctx.currentTime + 0.008);
-        gain.gain.exponentialRampToValueAtTime(0.0001, this.ctx.currentTime + 0.22);
+        gain.gain.linearRampToValueAtTime(0.13 + t * 0.07, this.ctx.currentTime + 0.008);
+        gain.gain.exponentialRampToValueAtTime(0.0001, this.ctx.currentTime + duration + 0.05);
 
         noise.connect(filter);
         filter.connect(gain);
         gain.connect(this.ctx.destination);
         noise.start();
-        noise.stop(this.ctx.currentTime + 0.25);
+        noise.stop(this.ctx.currentTime + duration + 0.08);
+
+        // Sub-thud: deeper and louder on lower rows, almost silent on top rows
+        if (t > 0.05) {
+            const thudFreq = jitter * (180 - t * 120); // 180 → 60 Hz
+            const thudGain = 0.08 + t * 0.38;          // 0.08 → 0.46
+            const thudLen  = 0.25 + t * 0.18;          // 0.25 → 0.43 s
+
+            const osc  = this.ctx.createOscillator();
+            const tGain = this.ctx.createGain();
+            osc.type = 'sine';
+            osc.frequency.setValueAtTime(thudFreq, this.ctx.currentTime);
+            osc.frequency.exponentialRampToValueAtTime(thudFreq * 0.3, this.ctx.currentTime + thudLen);
+            tGain.gain.setValueAtTime(thudGain, this.ctx.currentTime);
+            tGain.gain.exponentialRampToValueAtTime(0.0001, this.ctx.currentTime + thudLen);
+            osc.connect(tGain);
+            tGain.connect(this.ctx.destination);
+            osc.start(this.ctx.currentTime);
+            osc.stop(this.ctx.currentTime + thudLen + 0.05);
+        }
     },
 
     // ── Background rhythm voices ─────────────────────────────────────────

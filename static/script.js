@@ -360,7 +360,8 @@ function getLowestEmptyRow(c) {
 // chip-fresh is removed after 800 ms so the settled breathing-glow animation
 // can take over without an explicit JS animation loop.
 function playMove(r, c, player) {
-    if (typeof AudioEngine !== 'undefined') AudioEngine.playSwoosh();
+    // Pass row so audio pitch/weight scales with drop depth (row 0=top, 5=bottom)
+    if (typeof AudioEngine !== 'undefined') AudioEngine.playSwoosh(r);
     createStardustTrail(c, r, player);
 
     board[r][c] = player;
@@ -375,9 +376,16 @@ function playMove(r, c, player) {
     // Random bounce heights so each drop lands slightly differently
     spot.style.setProperty('--bounce-h1', `-${(5 + Math.random() * 8).toFixed(1)}px`);
     spot.style.setProperty('--bounce-h2', `-${(1 + Math.random() * 4).toFixed(1)}px`);
-    spot.classList.add('latest-piece', 'chip-fresh');
+
+    // Random ring spin speed: 2.5–5.5 s per rotation so each piece has its own pace
+    const ringSpeed = (2.5 + Math.random() * 3.0).toFixed(2) + 's';
+    spot.style.setProperty('--ring-speed', ringSpeed);
+
+    // 15 % chance of a "charged" electric flash on placement
+    const isCharged = Math.random() < 0.15;
+    spot.classList.add('latest-piece', isCharged ? 'chip-charged' : 'chip-fresh');
     spawnSparks(spot, player);
-    setTimeout(() => spot.classList.remove('chip-fresh'), 800);
+    setTimeout(() => spot.classList.remove('chip-fresh', 'chip-charged'), 800);
 }
 
 // v1.8.0 — 2026-04-11
@@ -732,15 +740,10 @@ function endGame(message, winningLine = null) {
 
         const fbBtn = document.getElementById('fb-share-btn');
         if (fbBtn) {
-            const result = winnerId === 'human' ? 'I just beat an AlphaZero AI at Connect 4!' :
-                           winnerId === 'ai'    ? `I lost to an AlphaZero AI in ${moveCount} moves — can you do better?` :
-                                                  'I drew against an AlphaZero AI at Connect 4!';
-            const shareUrl = `https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent('https://c4star.com')}&quote=${encodeURIComponent(result)}`;
-            fbBtn.href = shareUrl;
-            fbBtn.onclick = (e) => {
-                e.preventDefault();
-                window.open(shareUrl, '_blank', 'width=600,height=400');
-            };
+            const quote = winnerId === 'human' ? `I just beat an AlphaZero AI at Connect 4 in ${moveCount} moves! Can you do better? 🎮` :
+                          winnerId === 'ai'    ? `I lost to an AlphaZero AI in ${moveCount} moves — can you do better? 🤖` :
+                                                 `I drew against an AlphaZero AI at Connect 4! 🤝`;
+            fbBtn.dataset.quote = quote;
         }
     }
 }
