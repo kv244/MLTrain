@@ -140,6 +140,7 @@ function startGame(human_role) {
     _board.classList.remove('disabled');
     const kofi = document.getElementById('kofi-container');
     if (kofi) kofi.style.display = 'none';
+
     
     updateTurnUI();
 
@@ -687,7 +688,20 @@ function endGame(message, winningLine = null) {
         }).catch(e => console.error("Telemetry log failed:", e));
 
         const kofi = document.getElementById('kofi-container');
-        if (kofi) kofi.style.display = 'block';
+        if (kofi) kofi.style.display = 'flex';
+
+        const fbBtn = document.getElementById('fb-share-btn');
+        if (fbBtn) {
+            const result = winnerId === 'human' ? 'I just beat an AlphaZero AI at Connect 4!' :
+                           winnerId === 'ai'    ? `I lost to an AlphaZero AI in ${moveCount} moves — can you do better?` :
+                                                  'I drew against an AlphaZero AI at Connect 4!';
+            const shareUrl = `https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent('https://c4star.com')}&quote=${encodeURIComponent(result)}`;
+            fbBtn.href = shareUrl;
+            fbBtn.onclick = (e) => {
+                e.preventDefault();
+                window.open(shareUrl, '_blank', 'width=600,height=400');
+            };
+        }
     }
 }
 
