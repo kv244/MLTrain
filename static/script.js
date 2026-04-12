@@ -617,11 +617,18 @@ function isDraw() {
 
 function updateTurnUI() {
     if (gameOver) return;
-    
+
     if (currentPlayer === humanPlayer) {
         _badge.innerText = "Your Turn";
         _badge.className = "player-turn-badge turn-p1";
         document.documentElement.style.setProperty('--ui-glow', 'var(--neon-magenta)');
+
+        // Auto-hint on easy difficulty
+        if (_difficultySelect.value === 'easy') {
+            setTimeout(() => {
+                if (!gameOver && currentPlayer === humanPlayer) getHint();
+            }, 500);
+        }
     } else {
         _badge.innerText = "AI is thinking...";
         _badge.className = "player-turn-badge turn-ai";
