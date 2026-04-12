@@ -7,9 +7,9 @@ This project implements the AlphaZero algorithm to train a neural network to pla
 
 ## Live Demo
 
-**Game:** http://34.124.246.40
+**Game:** http://34.124.251.132
 
-**Admin analytics dashboard:** http://34.124.246.40/admin/`<ADMIN_TOKEN>`
+**Admin analytics dashboard:** http://34.124.251.132/admin/`<ADMIN_TOKEN>`
 _(token is set via the `ADMIN_TOKEN` environment variable on the server — see `.env`)_
 
 ## Prerequisites
@@ -171,7 +171,7 @@ sudo systemctl start connect4
 In your Flask web app repo, use the `.github/workflows/deploy.yml` provided in the codebase.
 
 **Key Hardening**:
-- **SSH Fingerprints**: The workflow uses hardcoded fingerprints for the production VM (`34.124.246.40`) to ensure stable CI/CD connections and prevent MITM verification flakes.
+- **SSH Fingerprints**: The workflow uses hardcoded fingerprints for the production VM (`34.124.251.132`) to ensure stable CI/CD connections and prevent MITM verification flakes.
 
 ### GitHub Secrets
 
