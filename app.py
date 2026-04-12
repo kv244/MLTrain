@@ -500,6 +500,44 @@ def assess_move():
 def health():
     return jsonify({"status": "ok"}), 200
 
+# Simple 5-minute in-memory cache so every page load doesn't bill a BQ query
+_stats_cache = {"data": None, "expires": 0}
+
+@app.route("/api/stats")
+@limiter.limit("30 per minute")
+def api_stats():
+    """Return global game totals from BigQuery, cached for 5 minutes."""
+    now = time.time()
+    if _stats_cache["data"] and now < _stats_cache["expires"]:
+        return jsonify(_stats_cache["data"])
+
+    if not bigquery_tracker._enabled:
+        return jsonify({"total_games": None})
+
+    try:
+        ref = bigquery_tracker._table_ref
+        row = next(iter(bigquery_tracker._client.query(f"""
+            SELECT
+                COALESCE(SUM(total_games),  0) AS total_games,
+                COALESCE(SUM(player_wins),  0) AS player_wins,
+                COALESCE(SUM(ai_wins),      0) AS ai_wins,
+                COALESCE(COUNT(*),          0) AS unique_players
+            FROM `{ref}`
+        """).result()))
+        data = {
+            "total_games":     int(row.total_games),
+            "player_wins":     int(row.player_wins),
+            "ai_wins":         int(row.ai_wins),
+            "unique_players":  int(row.unique_players),
+        }
+    except Exception as e:
+        print(f"[api/stats] BQ query failed: {e}")
+        return jsonify({"total_games": None})
+
+    _stats_cache["data"]    = data
+    _stats_cache["expires"] = now + 300  # 5 minutes
+    return jsonify(data)
+
 @app.route("/api/geoip")
 @limiter.limit("10 per minute")
 def geoip():

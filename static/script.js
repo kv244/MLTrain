@@ -697,10 +697,11 @@ async function initWelcomeMessage() {
 
     toast.classList.remove('hidden');
 
-    // Kick off both requests in parallel
-    const [geoRes, infoRes] = await Promise.allSettled([
+    // Kick off all three requests in parallel
+    const [geoRes, infoRes, statsRes] = await Promise.allSettled([
         fetch('https://geolocation-db.com/json/'),
-        fetch('/api/geoip')
+        fetch('/api/geoip'),
+        fetch('/api/stats')
     ]);
 
     let country = "the physical realm";
@@ -730,7 +731,17 @@ async function initWelcomeMessage() {
         } catch (_) {}
     }
 
-    msgEl.innerText = `Thank you for joining me from ${country}!${wallpaperNote}`;
+    let globalNote = '';
+    if (statsRes.status === 'fulfilled' && statsRes.value.ok) {
+        try {
+            const s = await statsRes.value.json();
+            if (s.total_games !== null && s.total_games !== undefined) {
+                globalNote = ` · ${s.total_games.toLocaleString()} games played globally`;
+            }
+        } catch (_) {}
+    }
+
+    msgEl.innerText = `Thank you for joining me from ${country}!${globalNote}${wallpaperNote}`;
 
     // Auto-dismiss after 5 seconds to match progress bar
     setTimeout(() => {
