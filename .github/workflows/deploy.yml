@@ -39,31 +39,28 @@ jobs:
             set -e
             cd ${{ env.TARGET_DIR }}
             
-            # ── NUCLEAR: Pre-deploy Disk Cleanup ──
-            echo "Emergency cleanup initiated..."
+            # ── Pre-deploy Backup & Disk Cleanup ──
+            mkdir -p ~/backups
+            TIMESTAMP=$(date +%Y%m%d_%H%M%S)
+            tar -czf ~/backups/mltrain_backup_${TIMESTAMP}.tar.gz . \
+              --exclude="./.git" --exclude="./.venv" --exclude="./__pycache__" --exclude="./*.pt" \
+              --exclude="./*.onnx" --exclude="./*.onnx.data" || true
+
+            # Keep only the 3 most recent backups
+            ls -t ~/backups/mltrain_backup_*.tar.gz 2>/dev/null | tail -n +4 | xargs rm -f || true
+
+            # Disk cleanup (after backup is secured)
             rm -rf ~/.cache/pip || true
-            rm -rf ~/backups/* || true
             sudo docker system prune -af || true
             sudo journalctl --vacuum-time=1d || true
-            
+
             # Verify space
             FREE_SPACE=$(df -m / | awk 'NR==2 {print $4}')
             echo "Available space: ${FREE_SPACE}MB"
-            
+
             if [ "$FREE_SPACE" -lt 500 ]; then
               echo "CRITICAL: Insufficient disk space for deployment."
               exit 1
-            fi
-            
-            # Skip backup if space is still tight
-            if [ "$FREE_SPACE" -lt 1000 ]; then
-              echo "Space tight, skipping backup..."
-            else
-              mkdir -p ~/backups
-              TIMESTAMP=$(date +%Y%m%d_%H%M%S)
-              tar -czf ~/backups/mltrain_backup_${TIMESTAMP}.tar.gz . \
-                --exclude="./.git" --exclude="./.venv" --exclude="./__pycache__" --exclude="./*.pt" \
-                --exclude="./*.onnx" --exclude="./*.onnx.data" || true
             fi
 
             # Backup current venv for immediate rollback
