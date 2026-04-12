@@ -7,9 +7,9 @@ This project implements the AlphaZero algorithm to train a neural network to pla
 
 ## Live Demo
 
-**Game:** http://34.124.251.132
+**Game:** https://c4star.com
 
-**Admin analytics dashboard:** http://34.124.251.132/admin/`<ADMIN_TOKEN>`
+**Admin analytics dashboard:** https://c4star.com/admin/`<ADMIN_TOKEN>`
 _(token is set via the `ADMIN_TOKEN` environment variable on the server — see `.env`)_
 
 ## Prerequisites
@@ -223,8 +223,8 @@ GCP often maps email-based SSH keys to a user with a dot (e.g., `razvan.petrescu
 |---|---|
 | Name | `allow-connect4` |
 | Direction | Ingress |
-| Source IPv4 ranges | `0.0.0.0/0` |
-| Protocols and ports | TCP, port `5000` (or `80` if using nginx) |
+| Source IPv4 ranges | Cloudflare IP ranges only (see `cloudflare.com/ips`) |
+| Protocols and ports | TCP, port `443` (HTTPS via Cloudflare proxy) |
 
 ### VM spec notes
 
@@ -248,15 +248,49 @@ sudo nano /etc/nginx/sites-available/connect4
 Paste this config:
 
 ```nginx
-limit_req_zone $binary_remote_addr zone=connect4:10m rate=5r/m;
+# Resolve real visitor IP from Cloudflare proxy
+set_real_ip_from 173.245.48.0/20;
+set_real_ip_from 103.21.244.0/22;
+set_real_ip_from 103.22.200.0/22;
+set_real_ip_from 103.31.4.0/22;
+set_real_ip_from 141.101.64.0/18;
+set_real_ip_from 108.162.192.0/18;
+set_real_ip_from 190.93.240.0/20;
+set_real_ip_from 188.114.96.0/20;
+set_real_ip_from 197.234.240.0/22;
+set_real_ip_from 198.41.128.0/17;
+set_real_ip_from 162.158.0.0/15;
+set_real_ip_from 104.16.0.0/13;
+set_real_ip_from 104.24.0.0/14;
+set_real_ip_from 172.64.0.0/13;
+set_real_ip_from 131.0.72.0/22;
+real_ip_header CF-Connecting-IP;
+
+limit_req_zone $binary_remote_addr zone=one:10m rate=60r/m;
 
 server {
     listen 80;
+    server_name c4star.com www.c4star.com;
+    return 301 https://$host$request_uri;
+}
+
+server {
+    listen 443 ssl;
+    server_name c4star.com www.c4star.com;
+
+    ssl_certificate     /etc/ssl/cloudflare/origin.pem;
+    ssl_certificate_key /etc/ssl/cloudflare/origin.key;
+    ssl_protocols       TLSv1.2 TLSv1.3;
+    ssl_ciphers         HIGH:!aNULL:!MD5;
+
+    limit_req zone=one burst=30 nodelay;
 
     location / {
-        limit_req zone=connect4 burst=10 nodelay;
-        limit_req_status 429;
-        proxy_pass http://127.0.0.1:5000;
+        proxy_pass         http://127.0.0.1:5000;
+        proxy_set_header   Host              $host;
+        proxy_set_header   X-Real-IP         $remote_addr;
+        proxy_set_header   X-Forwarded-For   $remote_addr;
+        proxy_set_header   X-Forwarded-Proto $scheme;
     }
 }
 ```
@@ -298,9 +332,9 @@ Set a budget alert so you're notified before costs spiral:
 Set a threshold (e.g. $20/month) — GCP will email you before you're surprised. The e2-medium is a fixed ~$25/month with no autoscaling, so the real risk is CPU overload slowing the app, not an unbounded bill.
 
 ### 🚀 Future Roadmap & TODOs
-- [x] **Secure Connection (HTTPS):** Registered a domain name and set up SSL certificates via Let's Encrypt (Certbot).
+- [x] **Secure Connection (HTTPS):** Domain `c4star.com` registered and proxied through Cloudflare. Origin secured with a Cloudflare Origin Certificate on nginx (Full Strict SSL mode). HTTP redirects to HTTPS.
+- [x] **Monetization:** Ko-fi donation button (`ko-fi.com/c4star`) shown post-game. Carbon Ads application pending.
 - [ ] **User Authentication:** Add a login system to restrict access and save player game statistics.
-- [ ] **Monetization Strategy:** Consider adding subtle ads or a premium model to cover hosting costs.
 - [ ] **Move History:** Add a feature to download or replay past games from the UI.
 - [x] **Real-time Analytics:** BigQuery player analytics implemented — tracks visits, games, win/loss, moves per IP. Admin dashboard at `/admin/<token>`.
 - [x] **Global Player Map:** Geo-IP welcome message now done browser-side (geolocation-db.com whitelisted in CSP) so the client's real IP is used. Includes wallpaper renewal countdown.
@@ -309,6 +343,12 @@ Set a threshold (e.g. $20/month) — GCP will email you before you're surprised.
 - [x] **Root Cause Analysis (RCA):** Completed detailed analysis of the April 2026 deployment outages.
 
 ## Version History
+
+### [v1.9.0] - 2026-04-12
+- **HTTPS & Custom Domain:** Site live at `https://c4star.com` via Cloudflare proxy with Full Strict SSL. Cloudflare Origin Certificate installed on nginx. HTTP auto-redirects to HTTPS.
+- **nginx Rate Limiting Fix:** Rate limit raised from 5 req/min to 60 req/min (burst 30) to support full games without 503 errors. Real visitor IP now extracted from `CF-Connecting-IP` header — previously all users shared one Cloudflare IP bucket.
+- **Ko-fi Donation Button:** Post-game coffee button linking to `ko-fi.com/c4star`. Dismisses on restart.
+- **Deploy Backup Fix:** Backup now runs before disk cleanup (previously wiped before saving). Retains last 3 archives. Excludes `.venv.backup` and `*.pt.*` files to prevent 800MB+ bloat.
 
 ### [v1.8.0] - 2026-04-11/12
 
