@@ -144,17 +144,6 @@ label {
     cursor: not-allowed;
 }
 
-.slider-wrapper {
-    display: flex;
-    align-items: center;
-    gap: 0.75rem;
-}
-
-input[type=range] {
-    flex: 1;
-    accent-color: var(--accent-color);
-}
-
 .action-buttons {
     width: 100%;
     display: flex;
@@ -190,6 +179,11 @@ input[type=range] {
 .secondary-btn:hover {
     background-color: #fffa65;
     transform: translateY(-2px);
+}
+
+.btn-small {
+    font-size: 0.85rem;
+    padding: 0.5rem 1.25rem;
 }
 
 /* Stats Panel Grid Layout */
@@ -239,6 +233,9 @@ input[type=range] {
 .stat-value.highlight {
     color: var(--accent-color);
 }
+
+.stat-color-p1 { color: var(--player-1); }
+.stat-color-p2 { color: var(--player-2); }
 
 .hidden {
     display: none !important;
