@@ -5,6 +5,13 @@
 
 This project implements the AlphaZero algorithm to train a neural network to play Connect 4. The training loop is heavily optimized for modern NVIDIA GPUs (like the RTX 4070) by using batched MCTS, mixed-precision training, and Tensor Core acceleration.
 
+## Live Demo
+
+**Game:** http://34.124.246.40
+
+**Admin analytics dashboard:** http://34.124.246.40/admin/`<ADMIN_TOKEN>`
+_(token is set via the `ADMIN_TOKEN` environment variable on the server — see `.env`)_
+
 ## Prerequisites
 
 - Python 3.10+
@@ -193,11 +200,8 @@ Add the public key to the VM via **GCP Console → Compute Engine → VM instanc
 #### ❌ Error: Permission denied (publickey)
 This usually means the SSH key in GitHub Secrets does not match the `authorized_keys` file on the VM, or there is a **Username Mismatch**.
 1.  **Check the User**: In GitHub Secrets, `GCP_VM_USER` must be `razvan_petrescu` (underscore).
-2.  **Verify the Key**: Ensure the private key in `GCP_SSH_PRIVATE_KEY` was copied directly from the local `id_deploy_final` file (not the chat terminal).
-3.  **Manual Authorization**: If still failing, re-run the manual authorization command:
-    ```bash
-    echo "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIJUOGRtwL6yFjNCAA0e/v+ttBM9gzwzfTH3Tk/rLVUQD connect4-deploy" >> ~/.ssh/authorized_keys
-    ```
+2.  **Verify the Key**: Ensure the private key in `GCP_SSH_PRIVATE_KEY` matches the public key in `~/.ssh/authorized_keys` on the VM.
+3.  **Rotate the key** if needed — see _Setting up the SSH key_ above. Never commit private keys to the repository; `id_*` and `*.pem` are blocked by `.gitignore`.
 
 #### ❌ Error: 502 Bad Gateway
 This means the Gunicorn/Flask app failed to start.
@@ -298,13 +302,32 @@ Set a threshold (e.g. $20/month) — GCP will email you before you're surprised.
 - [ ] **User Authentication:** Add a login system to restrict access and save player game statistics.
 - [ ] **Monetization Strategy:** Consider adding subtle ads or a premium model to cover hosting costs.
 - [ ] **Move History:** Add a feature to download or replay past games from the UI.
-- [ ] **Real-time Analytics:** Show how many users are currently connected and playing.
-- [x] **Global Player Map:** Geo-IP welcome message implemented via a server-side `/api/geoip` proxy (avoids CSP/CORS blocks).
-- [ ] **SQLite Integration:** Implement a robust database for game results and telemetry to replace the current CSV system.
+- [x] **Real-time Analytics:** BigQuery player analytics implemented — tracks visits, games, win/loss, moves per IP. Admin dashboard at `/admin/<token>`.
+- [x] **Global Player Map:** Geo-IP welcome message now done browser-side (geolocation-db.com whitelisted in CSP) so the client's real IP is used. Includes wallpaper renewal countdown.
+- [x] **Database Integration:** BigQuery replaces the CSV-only telemetry system for structured per-player analytics.
 - [x] **Dynamic Environment:** Successfully implemented via `background_manager.py`. The system automatically generates and rotates high-fidelity cyberpunk backgrounds using the Gemini API and Vertex AI Imagen once a week, keeping the UI fresh and modern.
 - [x] **Root Cause Analysis (RCA):** Completed detailed analysis of the April 2026 deployment outages.
 
 ## Version History
+
+### [v1.8.0] - 2026-04-11/12
+
+#### Training
+- **MCTS `expand()` uniform fallback**: Fixed a silent bug where `sum_p == 0` (float32 softmax underflow on policy logits) caused `expand()` to add no children, leaving a non-terminal node as a perpetual leaf — caused a 5-hour evaluation hang at iter 480.
+- **`evaluate_model` hang guard**: Replaced `while True` with `for _ in range(42)` + explicit validity and `None` guards to prevent infinite loops.
+- **MCTS tree reuse**: Removed `and chosen_child.children` guard in `self_play.py` — previously discarded the entire accumulated tree after almost every move because newly chosen children are unexpanded leaves. Tree now correctly carries over visit counts across moves.
+- **LR recovery**: Lowered base LR to `5e-4` and added `MultiStepLR` schedule (×0.1 at iter 700 and 1000) to stabilise late-stage training.
+- **Training resumed** from `checkpoint_best.pt` (iter 460) after value head saturation detected at iter 910.
+
+#### Web App
+- **Piece FX overhaul** (`style.css`, `script.js`): spinning dashed inner ring (CW/CCW per player), drop-in + sizzle animation on placement, breathing glow on settled pieces, fixed-position spark particle burst on each drop, randomised landing bounce using CSS custom properties `--bounce-h1` / `--bounce-h2`.
+- **Audio Engine v2** (`audio-engine.js`): replaced clangy random square-wave arpeggios with a structured atmospheric soundscape — sparse triangle pluck melody (8-step pattern with rests), chord pad wash (E3+B3 → A3+D4), soft sine kick + whisper hi-hat, 3-oscillator sub drone (E1 sawtooth + detuned square + B1 triangle fifth). BPM lowered to 128.
+- **Move assessment** (`app.py`): fixed star rating collapse (was `temperature=0` → only 1 or 5 stars; now `temperature=1.0`). Gemini prompt now includes played column, optimal column, and % confidence match for generative, context-aware comments.
+- **Geo-IP** (`app.py`, `script.js`): geolocation-db.com added to CSP `connect-src`; browser now calls it directly so the client's real IP is used. `/api/geoip` simplified to return only the wallpaper renewal countdown. Welcome toast shows on every page load (sessionStorage guard removed).
+- **BigQuery analytics** (`bigquery_tracker.py`, `app.py`): new `connect4.player_stats` table on `gen-lang-client-0269772194`. Tracks IP, country, first/last seen, visits, games, wins, draws, total moves. `MERGE` upsert on every page load and game end. All BQ calls are fire-and-forget daemon threads.
+- **Admin dashboard** (`/admin/<token>`): protected by `ADMIN_TOKEN` env var (404 on mismatch). Shows grand-total stat cards, daily new-visitor table (last 30 days), and full per-IP breakdown with win% bar and new/returning badge.
+- **`google.genai` migration** (`app.py`, `background_manager.py`): migrated from the deprecated `google.generativeai` package to `google.genai` (`google-genai` in `requirements.txt`).
+- **Security**: removed accidentally committed SSH private key (`id_deploy_final`); added `id_*` and `*.pem` patterns to `.gitignore`.
 
 ### [v1.7.0] - 2026-04-10
 - **Training Recovery**: Diagnosed value head saturation in checkpoint 910 (value always ~1.0, uniform policy). Rolled back to `checkpoint_best.pt` (iter 460), cleared the contaminated replay buffer, and lowered base LR to `5e-4` for a clean recovery run.
