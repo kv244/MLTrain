@@ -138,6 +138,8 @@ function startGame(human_role) {
     _boardArea.classList.remove('hidden');
     _btnReset.classList.add('hidden');
     _board.classList.remove('disabled');
+    const kofi = document.getElementById('kofi-container');
+    if (kofi) kofi.style.display = 'none';
     
     updateTurnUI();
 
@@ -683,6 +685,9 @@ function endGame(message, winningLine = null) {
                 country: sessionCountry
             })
         }).catch(e => console.error("Telemetry log failed:", e));
+
+        const kofi = document.getElementById('kofi-container');
+        if (kofi) kofi.style.display = 'block';
     }
 }
 
