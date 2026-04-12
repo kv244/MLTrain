@@ -67,8 +67,15 @@ jobs:
               echo "Space under 1500MB — skipping backup to preserve headroom."
             fi
 
-            # Backup current venv for immediate rollback
-            [ -d .venv ] && (rm -rf .venv.backup && cp -r .venv .venv.backup) || true
+            # Backup current venv for rollback only if space allows (venv ~1.7GB)
+            FREE_NOW=$(df -m / | awk 'NR==2 {print $4}')
+            if [ "$FREE_NOW" -gt 2000 ] && [ -d .venv ]; then
+              rm -rf .venv.backup && cp -r .venv .venv.backup || true
+              echo "Venv backup created."
+            else
+              echo "Space under 2000MB — skipping venv backup."
+              rm -rf .venv.backup || true
+            fi
 
             git pull origin main
 
