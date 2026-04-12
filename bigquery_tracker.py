@@ -116,10 +116,10 @@ VALUES
 
 _GAME_MERGE = """
 MERGE `{table_ref}` AS T
-USING (SELECT @ip AS ip_address) AS S
+USING (SELECT @ip AS ip_address, CURRENT_TIMESTAMP() AS ts) AS S
 ON T.ip_address = S.ip_address
 WHEN MATCHED THEN UPDATE SET
-    last_seen    = CURRENT_TIMESTAMP(),
+    last_seen    = S.ts,
     total_games  = T.total_games  + 1,
     player_wins  = T.player_wins  + @player_win,
     ai_wins      = T.ai_wins      + @ai_win,
@@ -128,6 +128,14 @@ WHEN MATCHED THEN UPDATE SET
     easy_games   = COALESCE(T.easy_games,   0) + @easy,
     medium_games = COALESCE(T.medium_games, 0) + @medium,
     hard_games   = COALESCE(T.hard_games,   0) + @hard
+WHEN NOT MATCHED THEN INSERT
+    (ip_address, first_seen, last_seen,
+     total_visits, total_games, player_wins, ai_wins, draws, total_moves,
+     easy_games, medium_games, hard_games)
+VALUES
+    (S.ip_address, S.ts, S.ts,
+     0, 1, @player_win, @ai_win, @is_draw, @moves,
+     @easy, @medium, @hard)
 """
 
 

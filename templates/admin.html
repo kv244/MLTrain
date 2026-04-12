@@ -138,7 +138,13 @@ async function refreshBackground() {
     btn.disabled = true;
     status.textContent = 'Generating… (this takes ~30s)';
     try {
-        const res = await fetch(`/api/admin/refresh_background?auth={{ admin_token }}`);
+        // Token sent in POST body — not in URL — so it stays out of server logs
+        // and browser history.
+        const res = await fetch('/api/admin/refresh_background', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ token: '{{ admin_token }}' })
+        });
         const data = await res.json();
         status.textContent = res.ok ? '✓ Background updated!' : '✗ ' + data.message;
     } catch (e) {

@@ -62,6 +62,11 @@ MODELS_DIR = pathlib.Path(".").resolve()
 _csv_lock = threading.Lock()
 _model_lock = threading.Lock()
 
+# Single shared OpenVINO Core instance — creating ov.Core() is heavyweight
+# (scans hardware, loads plugins).  Re-using one instance avoids redundant
+# initialisation on every model load and when querying available devices.
+_ov_core = ov.Core()
+
 def _resolve_checkpoint(name: str):
     """Return safe absolute path or None if invalid."""
     try:
@@ -80,8 +85,7 @@ LOADED_MODELS = OrderedDict() # FIX 6
 device = torch.device("cpu") # PyTorch tensor device for CPU memory handling
 
 def get_ov_device():
-    core = ov.Core()
-    available = core.available_devices
+    available = _ov_core.available_devices
     if "NPU" in available: return "npu"
     if "GPU" in available: return "gpu"
     return "cpu"
@@ -90,25 +94,22 @@ GLOBAL_OV_DEVICE = get_ov_device()
 
 class OpenVINOModel:
     """A wrapper to make an OpenVINO model behave like a PyTorch model for inference."""
-    def __init__(self, model_path: str, device: str = "AUTO"):
-        self._lock = threading.Lock() # FIX 5: OpenVINO thread safety
-        core = ov.Core()
-        
-        # Check available devices to prioritize NPU
-        available_devices = core.available_devices
+    def __init__(self, model_path: str):
+        self._lock = threading.Lock()
+
+        available_devices = _ov_core.available_devices
         if "NPU" in available_devices:
             device = "NPU"
         elif "GPU" in available_devices:
             device = "GPU"
         else:
             device = "CPU"
-            
+
         print(f"OpenVINO initializing on device: {device} (Available: {available_devices})")
-        
-        ov_model = core.read_model(model=model_path)
-        # Latency hint is best for interactive applications like games
-        self.compiled_model = core.compile_model(
-            model=ov_model, 
+
+        ov_model = _ov_core.read_model(model=model_path)
+        self.compiled_model = _ov_core.compile_model(
+            model=ov_model,
             device_name=device,
             config={"PERFORMANCE_HINT": "LATENCY"}
         )
@@ -179,8 +180,8 @@ def log_game_end():
 
     # CSV log (existing behaviour)
     results_file = os.environ.get("RESULTS_LOG_PATH", "game_results.csv")
-    file_exists  = os.path.isfile(results_file)
     with _csv_lock:
+        file_exists = os.path.isfile(results_file)  # checked inside lock to avoid TOCTOU
         with open(results_file, mode='a', newline='') as csv_file:
             writer = csv.writer(csv_file)
             if not file_exists:
@@ -309,8 +310,8 @@ def get_move():
     
     # Write telemetry to CSV
     telemetry_file = os.environ.get("TELEMETRY_LOG_PATH", "telemetry.csv")
-    file_exists = os.path.isfile(telemetry_file)
     with _csv_lock:
+        file_exists = os.path.isfile(telemetry_file)  # checked inside lock to avoid TOCTOU
         with open(telemetry_file, mode='a', newline='') as csv_file:
             writer = csv.writer(csv_file)
             if not file_exists:
@@ -633,16 +634,18 @@ def admin_dashboard(token):
                            admin_token=token)
 
 
-@app.route("/api/admin/refresh_background")
+@app.route("/api/admin/refresh_background", methods=["POST"])
 @limiter.limit("2 per minute")
 def refresh_background():
-    """Manually triggers a background update using Gemini + Vertex AI Imagen."""
-    auth_token = request.args.get("auth")
-    # For simplicity, we check an env-based secret
+    """Manually triggers a background update using Gemini + Vertex AI Imagen.
+    Expects JSON body: { "token": "<ADMIN_TOKEN>" }
+    Token is sent in the request body (not the URL) to keep it out of server logs."""
     expected_token = os.environ.get("ADMIN_TOKEN")
+    data = request.get_json(silent=True) or {}
+    auth_token = data.get("token", "")
     if not expected_token or auth_token != expected_token:
         return jsonify({"error": "Unauthorized"}), 401
-    
+
     success = background_manager.update_background()
     if success:
         return jsonify({"status": "Success", "message": "Background updated"}), 200

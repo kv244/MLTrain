@@ -105,10 +105,11 @@ def run_batched_self_play(
             for i, node in new_roots.items():
                 roots[i] = node
         
-        for i in active:
-            if i not in to_expand and roots[i] is not None:
-                if roots[i].children:
-                    _add_dirichlet_noise(roots[i], epsilon=epsilon)
+        # NOTE: do NOT re-add Dirichlet noise to reused roots here.
+        # Noise is applied once in _expand_roots_batched when each root is first
+        # created.  Adding it again to an already partially-explored tree corrupts
+        # accumulated visit counts and Q-values (AlphaZero spec: noise at root
+        # creation only, not on every subsequent search).
 
         for _ in range(num_sims - 1):
             to_evaluate = []
@@ -206,7 +207,11 @@ def _visits_to_probs(root: MCTSNode, temperature: float) -> np.ndarray:
         return probs
 
     visits = visits ** (1.0 / temperature)
-    return visits / visits.sum()
+    total = visits.sum()
+    if total == 0:
+        # Fallback: uniform over all columns (should never happen in normal play)
+        return np.ones(7, dtype=np.float64) / 7
+    return visits / total
 
 
 def _history_to_training_data(history, winner):
