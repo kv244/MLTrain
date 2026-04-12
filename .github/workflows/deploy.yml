@@ -39,29 +39,31 @@ jobs:
             set -e
             cd ${{ env.TARGET_DIR }}
             
-            # ── Pre-deploy Backup & Disk Cleanup ──
-            mkdir -p ~/backups
-            TIMESTAMP=$(date +%Y%m%d_%H%M%S)
-            tar -czf ~/backups/mltrain_backup_${TIMESTAMP}.tar.gz . \
-              --exclude="./.git" --exclude="./.venv" --exclude="./.venv.backup" \
-              --exclude="./__pycache__" --exclude="./*.pt" --exclude="./*.pt.*" \
-              --exclude="./*.onnx" --exclude="./*.onnx.data" || true
-
-            # Keep only the 3 most recent backups
-            ls -t ~/backups/mltrain_backup_*.tar.gz 2>/dev/null | tail -n +4 | xargs rm -f || true
-
-            # Disk cleanup (after backup is secured)
+            # ── Pre-deploy Disk Cleanup ──
             rm -rf ~/.cache/pip || true
-            sudo docker system prune -af || true
             sudo journalctl --vacuum-time=1d || true
+            ls -t ~/backups/mltrain_backup_*.tar.gz 2>/dev/null | tail -n +2 | xargs rm -f || true
 
-            # Verify space
+            # Verify space before backup attempt
             FREE_SPACE=$(df -m / | awk 'NR==2 {print $4}')
             echo "Available space: ${FREE_SPACE}MB"
 
             if [ "$FREE_SPACE" -lt 500 ]; then
               echo "CRITICAL: Insufficient disk space for deployment."
               exit 1
+            fi
+
+            # Backup source code only if space allows
+            if [ "$FREE_SPACE" -gt 1500 ]; then
+              mkdir -p ~/backups
+              TIMESTAMP=$(date +%Y%m%d_%H%M%S)
+              tar -czf ~/backups/mltrain_backup_${TIMESTAMP}.tar.gz . \
+                --exclude="./.git" --exclude="./.venv" --exclude="./.venv.backup" \
+                --exclude="./__pycache__" --exclude="./*.pt" --exclude="./*.pt.*" \
+                --exclude="./*.onnx" --exclude="./*.onnx.data" || true
+              echo "Backup created."
+            else
+              echo "Space under 1500MB — skipping backup to preserve headroom."
             fi
 
             # Backup current venv for immediate rollback
