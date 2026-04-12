@@ -1,0 +1,255 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Connect 4 AI — Admin Dashboard</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg:        #050510;
+            --panel:     rgba(10, 10, 25, 0.85);
+            --cyan:      #00e5ff;
+            --magenta:   #ff00ff;
+            --lime:      #39ff14;
+            --red:       #ff2d55;
+            --gold:      #ffe700;
+            --text:      #c9d1d9;
+            --heading:   #f0f6fc;
+            --border:    rgba(0, 229, 255, 0.15);
+        }
+        * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Inter', sans-serif; }
+
+        body {
+            background: var(--bg);
+            color: var(--text);
+            min-height: 100vh;
+            padding: 2rem;
+        }
+
+        h1 {
+            color: var(--cyan);
+            font-size: 1.8rem;
+            text-shadow: 0 0 12px var(--cyan);
+            margin-bottom: 0.25rem;
+        }
+        .subtitle { color: #8b949e; font-size: 0.85rem; margin-bottom: 2rem; }
+
+        /* ── Stat cards ─────────────────────────────────────────── */
+        .cards {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 1rem;
+            margin-bottom: 2.5rem;
+        }
+        .card {
+            background: var(--panel);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 1rem 1.5rem;
+            min-width: 130px;
+            flex: 1;
+            backdrop-filter: blur(8px);
+        }
+        .card-label { font-size: 0.72rem; text-transform: uppercase;
+                      letter-spacing: 1px; color: #8b949e; margin-bottom: 0.4rem; }
+        .card-value { font-size: 1.6rem; font-weight: 700; color: var(--heading); }
+        .card-value.cyan    { color: var(--cyan);    text-shadow: 0 0 8px var(--cyan); }
+        .card-value.magenta { color: var(--magenta); text-shadow: 0 0 8px var(--magenta); }
+        .card-value.lime    { color: var(--lime);    text-shadow: 0 0 8px var(--lime); }
+        .card-value.red     { color: var(--red);     text-shadow: 0 0 8px var(--red); }
+        .card-value.gold    { color: var(--gold);    text-shadow: 0 0 8px var(--gold); }
+
+        /* ── Section headers ────────────────────────────────────── */
+        .section-title {
+            font-size: 0.8rem;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            color: var(--cyan);
+            border-bottom: 1px solid var(--border);
+            padding-bottom: 0.5rem;
+            margin-bottom: 1rem;
+        }
+        .section { margin-bottom: 2.5rem; }
+
+        /* ── Tables ─────────────────────────────────────────────── */
+        .table-wrap { overflow-x: auto; border-radius: 10px;
+                      border: 1px solid var(--border); }
+        table { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
+        thead th {
+            background: rgba(0, 229, 255, 0.06);
+            color: var(--cyan);
+            font-size: 0.72rem;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            padding: 0.75rem 1rem;
+            text-align: left;
+            white-space: nowrap;
+        }
+        tbody tr { border-top: 1px solid var(--border); }
+        tbody tr:hover { background: rgba(0, 229, 255, 0.04); }
+        td { padding: 0.65rem 1rem; white-space: nowrap; }
+
+        .win-bar-wrap { display: flex; align-items: center; gap: 6px; }
+        .win-bar { height: 6px; border-radius: 3px; background: var(--border); width: 60px; }
+        .win-bar-fill { height: 100%; border-radius: 3px;
+                        background: linear-gradient(90deg, var(--lime), var(--cyan)); }
+        .country-flag { font-size: 1rem; margin-right: 4px; }
+
+        .badge {
+            display: inline-block;
+            padding: 2px 8px;
+            border-radius: 20px;
+            font-size: 0.72rem;
+            font-weight: 600;
+        }
+        .badge-new  { background: rgba(57,255,20,.15);  color: var(--lime); }
+        .badge-ret  { background: rgba(0,229,255,.1);   color: var(--cyan); }
+
+        .error-box {
+            background: rgba(255, 45, 85, 0.1);
+            border: 1px solid var(--red);
+            border-radius: 8px;
+            padding: 1rem;
+            color: var(--red);
+            margin-bottom: 1.5rem;
+        }
+
+        .empty { color: #555; font-style: italic; padding: 1rem; text-align: center; }
+    </style>
+</head>
+<body>
+
+<h1>⬡ Connect 4 AI — Analytics</h1>
+<p class="subtitle">Live data from BigQuery · auto-fetched on each page load</p>
+
+{% if error %}
+<div class="error-box">⚠ BigQuery error: {{ error }}</div>
+{% endif %}
+
+<!-- ── Grand totals ──────────────────────────────────────────────────────── -->
+<div class="cards">
+    <div class="card">
+        <div class="card-label">Unique IPs</div>
+        <div class="card-value cyan">{{ totals.get('unique_ips', 0) }}</div>
+    </div>
+    <div class="card">
+        <div class="card-label">Total Visits</div>
+        <div class="card-value">{{ totals.get('total_visits', 0) }}</div>
+    </div>
+    <div class="card">
+        <div class="card-label">Games Played</div>
+        <div class="card-value magenta">{{ totals.get('total_games', 0) }}</div>
+    </div>
+    <div class="card">
+        <div class="card-label">Player Wins</div>
+        <div class="card-value lime">{{ totals.get('player_wins', 0) }}</div>
+    </div>
+    <div class="card">
+        <div class="card-label">AI Wins</div>
+        <div class="card-value red">{{ totals.get('ai_wins', 0) }}</div>
+    </div>
+    <div class="card">
+        <div class="card-label">Draws</div>
+        <div class="card-value gold">{{ totals.get('draws', 0) }}</div>
+    </div>
+    <div class="card">
+        <div class="card-label">Total Moves</div>
+        <div class="card-value">{{ totals.get('total_moves', 0) }}</div>
+    </div>
+</div>
+
+<!-- ── Daily activity ────────────────────────────────────────────────────── -->
+<div class="section">
+    <div class="section-title">New Visitors by Day (last 30 days)</div>
+    <div class="table-wrap">
+        <table>
+            <thead>
+                <tr>
+                    <th>Day</th>
+                    <th>New Visitors</th>
+                    <th>Games That Day</th>
+                </tr>
+            </thead>
+            <tbody>
+            {% if daily %}
+                {% for row in daily %}
+                <tr>
+                    <td>{{ row.day }}</td>
+                    <td>{{ row.new_visitors }}</td>
+                    <td>{{ row.games_that_day }}</td>
+                </tr>
+                {% endfor %}
+            {% else %}
+                <tr><td colspan="3" class="empty">No data yet.</td></tr>
+            {% endif %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<!-- ── Per-IP breakdown ──────────────────────────────────────────────────── -->
+<div class="section">
+    <div class="section-title">Per-IP Breakdown</div>
+    <div class="table-wrap">
+        <table>
+            <thead>
+                <tr>
+                    <th>IP Address</th>
+                    <th>Country</th>
+                    <th>First Seen</th>
+                    <th>Last Seen</th>
+                    <th>Visits</th>
+                    <th>Games</th>
+                    <th>Player W</th>
+                    <th>AI W</th>
+                    <th>Draws</th>
+                    <th>Moves</th>
+                    <th>Win %</th>
+                    <th>Status</th>
+                </tr>
+            </thead>
+            <tbody>
+            {% if rows %}
+                {% for row in rows %}
+                <tr>
+                    <td><code style="color:var(--cyan);font-size:0.8rem;">{{ row.ip_address }}</code></td>
+                    <td>{{ row.country }}</td>
+                    <td>{{ row.first_day }}</td>
+                    <td>{{ row.last_day }}</td>
+                    <td>{{ row.total_visits }}</td>
+                    <td>{{ row.total_games }}</td>
+                    <td style="color:var(--lime)">{{ row.player_wins }}</td>
+                    <td style="color:var(--red)">{{ row.ai_wins }}</td>
+                    <td style="color:var(--gold)">{{ row.draws }}</td>
+                    <td>{{ row.total_moves }}</td>
+                    <td>
+                        {% if row.total_games > 0 %}
+                        <div class="win-bar-wrap">
+                            <div class="win-bar">
+                                <div class="win-bar-fill"
+                                     style="width:{{ row.win_pct or 0 }}%"></div>
+                            </div>
+                            {{ row.win_pct or 0 }}%
+                        </div>
+                        {% else %}—{% endif %}
+                    </td>
+                    <td>
+                        {% if row.first_day == row.last_day %}
+                            <span class="badge badge-new">New</span>
+                        {% else %}
+                            <span class="badge badge-ret">Returning</span>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% endfor %}
+            {% else %}
+                <tr><td colspan="12" class="empty">No data yet.</td></tr>
+            {% endif %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+</body>
+</html>

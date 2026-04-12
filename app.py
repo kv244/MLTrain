@@ -511,6 +511,74 @@ def geoip():
     return jsonify({"wallpaper_days_left": days_left})
 
 # NEW: Dynamic Environment Background Refresh
+@app.route("/admin/<token>")
+def admin_dashboard(token):
+    """Analytics dashboard — access restricted to holders of ADMIN_TOKEN in URL.
+    Returns 404 (not 403) to avoid revealing the endpoint exists."""
+    expected = os.environ.get("ADMIN_TOKEN", "")
+    if not expected or token != expected:
+        from flask import abort
+        abort(404)
+
+    rows, daily, totals, error = [], [], {}, None
+    if bigquery_tracker._enabled:
+        try:
+            client = bigquery_tracker._client
+            ref    = bigquery_tracker._table_ref
+
+            # ── Per-IP summary ────────────────────────────────────────────────
+            rows = list(client.query(f"""
+                SELECT
+                    ip_address,
+                    COALESCE(country, 'Unknown')           AS country,
+                    DATE(first_seen)                       AS first_day,
+                    DATE(last_seen)                        AS last_day,
+                    total_visits,
+                    total_games,
+                    player_wins,
+                    ai_wins,
+                    draws,
+                    total_moves,
+                    ROUND(SAFE_DIVIDE(player_wins,
+                          NULLIF(total_games, 0)) * 100, 1) AS win_pct
+                FROM `{ref}`
+                ORDER BY last_seen DESC
+            """).result())
+
+            # ── Daily new-visitor + games totals (last 30 days) ───────────────
+            daily = list(client.query(f"""
+                SELECT
+                    DATE(first_seen)  AS day,
+                    COUNT(*)          AS new_visitors,
+                    SUM(total_games)  AS games_that_day
+                FROM `{ref}`
+                GROUP BY day
+                ORDER BY day DESC
+                LIMIT 30
+            """).result())
+
+            # ── Grand totals ──────────────────────────────────────────────────
+            t = list(client.query(f"""
+                SELECT
+                    COUNT(*)          AS unique_ips,
+                    SUM(total_visits) AS total_visits,
+                    SUM(total_games)  AS total_games,
+                    SUM(player_wins)  AS player_wins,
+                    SUM(ai_wins)      AS ai_wins,
+                    SUM(draws)        AS draws,
+                    SUM(total_moves)  AS total_moves
+                FROM `{ref}`
+            """).result())
+            totals = dict(t[0]) if t else {}
+        except Exception as exc:
+            error = str(exc)
+    else:
+        error = "BigQuery not configured (GCP_PROJECT_ID missing)."
+
+    return render_template("admin.html",
+                           rows=rows, daily=daily, totals=totals, error=error)
+
+
 @app.route("/api/admin/refresh_background")
 @limiter.limit("2 per minute")
 def refresh_background():
