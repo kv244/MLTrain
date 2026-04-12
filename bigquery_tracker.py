@@ -60,24 +60,36 @@ def init():
 
 _CREATE_DDL = """
 CREATE TABLE IF NOT EXISTS `{table_ref}` (
-    ip_address   STRING    NOT NULL,
-    country      STRING,
-    first_seen   TIMESTAMP,
-    last_seen    TIMESTAMP,
-    total_visits INT64,
-    total_games  INT64,
-    player_wins  INT64,
-    ai_wins      INT64,
-    draws        INT64,
-    total_moves  INT64
+    ip_address      STRING    NOT NULL,
+    country         STRING,
+    first_seen      TIMESTAMP,
+    last_seen       TIMESTAMP,
+    total_visits    INT64,
+    total_games     INT64,
+    player_wins     INT64,
+    ai_wins         INT64,
+    draws           INT64,
+    total_moves     INT64,
+    easy_games      INT64,
+    medium_games    INT64,
+    hard_games      INT64
 )
 CLUSTER BY ip_address
 OPTIONS (description = 'Connect-4 AlphaZero — player session statistics');
 """
 
+# Migrate existing tables that predate difficulty tracking
+_ALTER_DDL = """
+ALTER TABLE `{table_ref}`
+ADD COLUMN IF NOT EXISTS easy_games   INT64,
+ADD COLUMN IF NOT EXISTS medium_games INT64,
+ADD COLUMN IF NOT EXISTS hard_games   INT64;
+"""
+
 def _ensure_table():
     try:
         _client.query(_CREATE_DDL.format(table_ref=_table_ref)).result()
+        _client.query(_ALTER_DDL.format(table_ref=_table_ref)).result()
         print(f"[BQTracker] Table ready: {_table_ref}")
     except Exception as exc:
         print(f"[BQTracker] ensure_table failed: {exc}")
@@ -107,12 +119,15 @@ MERGE `{table_ref}` AS T
 USING (SELECT @ip AS ip_address) AS S
 ON T.ip_address = S.ip_address
 WHEN MATCHED THEN UPDATE SET
-    last_seen   = CURRENT_TIMESTAMP(),
-    total_games = T.total_games + 1,
-    player_wins = T.player_wins + @player_win,
-    ai_wins     = T.ai_wins     + @ai_win,
-    draws       = T.draws       + @is_draw,
-    total_moves = T.total_moves + @moves
+    last_seen    = CURRENT_TIMESTAMP(),
+    total_games  = T.total_games  + 1,
+    player_wins  = T.player_wins  + @player_win,
+    ai_wins      = T.ai_wins      + @ai_win,
+    draws        = T.draws        + @is_draw,
+    total_moves  = T.total_moves  + @moves,
+    easy_games   = COALESCE(T.easy_games,   0) + @easy,
+    medium_games = COALESCE(T.medium_games, 0) + @medium,
+    hard_games   = COALESCE(T.hard_games,   0) + @hard
 """
 
 
@@ -147,16 +162,21 @@ def record_session(ip_address, country=None):
     ).start()
 
 
-def record_game(ip_address, winner, moves):
+def record_game(ip_address, winner, moves, difficulty="hard"):
     """Increment game outcome counters for this IP after a completed game.
-    winner: 'human' | 'ai' | 'draw'
-    moves:  total half-moves in the game."""
+    winner:     'human' | 'ai' | 'draw'
+    moves:      total half-moves in the game
+    difficulty: 'easy' | 'medium' | 'hard'"""
+    diff = difficulty.lower() if difficulty else "hard"
     params = [
         bigquery.ScalarQueryParameter("ip",         "STRING", ip_address or "unknown"),
         bigquery.ScalarQueryParameter("player_win", "INT64",  1 if winner == "human" else 0),
         bigquery.ScalarQueryParameter("ai_win",     "INT64",  1 if winner == "ai"    else 0),
         bigquery.ScalarQueryParameter("is_draw",    "INT64",  1 if winner == "draw"  else 0),
         bigquery.ScalarQueryParameter("moves",      "INT64",  max(0, int(moves))),
+        bigquery.ScalarQueryParameter("easy",       "INT64",  1 if diff == "easy"   else 0),
+        bigquery.ScalarQueryParameter("medium",     "INT64",  1 if diff == "medium" else 0),
+        bigquery.ScalarQueryParameter("hard",       "INT64",  1 if diff == "hard"   else 0),
     ]
     threading.Thread(
         target=_run, args=(_GAME_MERGE, params), daemon=True

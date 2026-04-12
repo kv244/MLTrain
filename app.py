@@ -178,10 +178,11 @@ def log_game_end():
     data = request.json
     if not data:
         return jsonify({"error": "Missing or invalid JSON"}), 400
-    winner        = data.get("winner", "unknown")
-    model_version = data.get("model",   "unknown")
-    moves         = data.get("moves",   0)
-    country       = data.get("country", "")
+    winner        = data.get("winner",     "unknown")
+    model_version = data.get("model",      "unknown")
+    moves         = data.get("moves",      0)
+    country       = data.get("country",    "")
+    difficulty    = data.get("difficulty", "hard")
     ip            = request.remote_addr
 
     # CSV log (existing behaviour)
@@ -196,7 +197,7 @@ def log_game_end():
                              model_version, winner, moves])
 
     # BigQuery — fire-and-forget in background thread
-    bigquery_tracker.record_game(ip, winner, moves)
+    bigquery_tracker.record_game(ip, winner, moves, difficulty)
 
     return jsonify({"success": True})
 

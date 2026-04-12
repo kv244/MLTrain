@@ -684,10 +684,11 @@ function endGame(message, winningLine = null) {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
             body: JSON.stringify({
-                winner:  winnerId,
-                model:   _modelSelect.value || "unknown",
-                moves:   moveCount,
-                country: sessionCountry
+                winner:     winnerId,
+                model:      _modelSelect.value || "unknown",
+                moves:      moveCount,
+                country:    sessionCountry,
+                difficulty: _difficultySelect.value
             })
         }).catch(e => console.error("Telemetry log failed:", e));
 
