@@ -671,33 +671,29 @@ def set_security_headers(response):
     response.headers['Referrer-Policy'] = 'strict-origin-when-cross-origin'
     return response
 
+# Pre-load the latest ONNX model at worker startup to eliminate cold-start latency.
+# Runs under Gunicorn (module import) and direct python app.py alike.
+_initial_models = sorted(glob.glob("*.onnx"), reverse=True)
+if _initial_models:
+    print(f"Pre-loading model: {_initial_models[0]}")
+    get_model(_initial_models[0])
+
+# Startup check for stale background image
+if background_manager.is_background_stale():
+    print("[App] Stale background detected, triggering update...")
+    def _safe_bg_update():
+        try:
+            background_manager.update_background()
+        except Exception as e:
+            print(f"[App] Background update failed: {e}")
+    threading.Thread(target=_safe_bg_update, daemon=True).start()
+
 if __name__ == "__main__":
-    # Create templates and static directories if they don't exist
     os.makedirs("templates", exist_ok=True)
     os.makedirs("static", exist_ok=True)
-    
     print("\nStarting Connect 4 AI Server...")
     print(f"Device: {device}")
-    
     app_host = os.environ.get("APP_HOST", "127.0.0.1")
     app_port = int(os.environ.get("APP_PORT", 5000))
     app_debug = os.environ.get("FLASK_DEBUG", "False").lower() == "true"
-    
-    # Pre-fetch the latest model to avoid cold-start latency for the first user
-    initial_models = sorted(glob.glob("*.onnx"), reverse=True)
-    if initial_models:
-        print(f"Pre-loading latest checkpoint for optimization: {initial_models[0]}")
-        get_model(initial_models[0])
-
-    # Dynamic Environment: Startup check for stale background
-    if background_manager.is_background_stale():
-        print("[App] Stale background detected, triggering update...")
-        # Run in a separate thread to avoid blocking startup
-        def _safe_update():
-            try:
-                background_manager.update_background()
-            except Exception as e:
-                print(f"[App] Background update failed: {e}")
-        threading.Thread(target=_safe_update, daemon=True).start()
-
     app.run(debug=app_debug, host=app_host, port=app_port)

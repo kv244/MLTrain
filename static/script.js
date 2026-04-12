@@ -23,6 +23,14 @@ function updateStatsUI() {
 // Difficulty → simulation count mapping
 const DIFF_SIMS = { easy: 100, medium: 800, hard: 2000 };
 
+const DIFF_DESC = {
+    easy:   'Easy — AI plays mostly random moves. Hints shown automatically. Great for beginners.',
+    medium: 'Medium — AI mixes strategy with random moves. A fair challenge.',
+    hard:   'Hard — full AlphaZero AI. Expect a draw at best; winning is very unlikely.'
+};
+
+let _hintAbortController = null;
+
 // DOM Elements
 const _board = document.getElementById('c4Board');
 const _modelSelect = document.getElementById('modelSelect');
@@ -50,6 +58,14 @@ document.addEventListener("DOMContentLoaded", () => {
 
     // Welcome Message (Geo-IP)
     initWelcomeMessage();
+
+    // Difficulty description
+    const _diffHint = document.getElementById('difficultyHint');
+    function updateDiffHint() {
+        if (_diffHint) _diffHint.innerText = DIFF_DESC[_difficultySelect.value] || '';
+    }
+    _difficultySelect.addEventListener('change', updateDiffHint);
+    updateDiffHint();
 
     // Step 4: Hint button
     if (_btnHint) {
@@ -172,6 +188,13 @@ async function handleColumnClick(c) {
 
     // Check if row 0 (top) is empty
     if (board[0][c] !== 0) return;
+
+    // Cancel any pending hint request so it doesn't queue behind the AI move
+    if (_hintAbortController) {
+        _hintAbortController.abort();
+        _hintAbortController = null;
+    }
+    clearBestMoveHint();
 
     // Save history BEFORE move
     saveHistory();
@@ -422,14 +445,18 @@ function createStardustTrail(col, endRow, player) {
 // Step 4: Hint function
 async function getHint() {
     if (gameOver || currentPlayer !== humanPlayer) return;
-    
+
+    if (_hintAbortController) _hintAbortController.abort();
+    _hintAbortController = new AbortController();
+
     _btnHint.disabled = true;
     _btnHint.innerText = "Thinking...";
-    
+
     try {
-        const res = await fetch('/api/move', { // Using move endpoint for "pure" AI best move
+        const res = await fetch('/api/move', {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
+            signal: _hintAbortController.signal,
             body: JSON.stringify({
                 model: _modelSelect.value,
                 board: board,
@@ -453,8 +480,9 @@ async function getHint() {
             setTimeout(() => colEl.classList.remove('best-move-hint'), 3000);
         }
     } catch (e) {
-        console.error("Hint failed", e);
+        if (e.name !== 'AbortError') console.error("Hint failed", e);
     } finally {
+        _hintAbortController = null;
         _btnHint.disabled = false;
         _btnHint.innerText = "Get Hint";
     }
