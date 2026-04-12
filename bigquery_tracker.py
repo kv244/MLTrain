@@ -150,7 +150,7 @@ def _run(sql_template, params):
         _client.query(
             sql_template.format(table_ref=_table_ref),
             job_config=cfg
-        ).result()
+        ).result(timeout=15)  # prevent threads hanging indefinitely on slow/unreachable BQ
     except Exception as exc:
         print(f"[BQTracker] Query error: {exc}")
 

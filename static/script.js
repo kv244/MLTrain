@@ -566,10 +566,14 @@ async function triggerAiMove() {
         }
 
         const col = data.move;
+        if (col === null || col === undefined || col < 0 || col >= 7) {
+            console.error("AI returned invalid move", data);
+            endGame("AI Error");
+            return;
+        }
         const row = getLowestEmptyRow(col);
-        
         if (row === -1) {
-            console.error("AI tried to play in full column");
+            console.error("AI tried to play in full column", col);
             return;
         }
 

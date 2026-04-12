@@ -164,6 +164,7 @@ def log_session():
 
 
 @app.route("/api/game_end", methods=["POST"])
+@limiter.limit("60 per hour")
 def log_game_end():
     """Receives and logs game outcome telemetry to CSV and BigQuery.
     Body: { "winner": "human"|"ai"|"draw", "model": "<str>", "moves": <int>,
@@ -177,6 +178,11 @@ def log_game_end():
     country       = data.get("country",    "")
     difficulty    = data.get("difficulty", "hard")
     ip            = request.remote_addr
+
+    if winner not in ("human", "ai", "draw"):
+        return jsonify({"error": "Invalid winner"}), 400
+    if difficulty not in ("easy", "medium", "hard"):
+        difficulty = "hard"  # silently normalise unknown values
 
     # CSV log (existing behaviour)
     results_file = os.environ.get("RESULTS_LOG_PATH", "game_results.csv")
@@ -214,6 +220,8 @@ def get_move():
     board_state = data.get("board", [])
     current_player = data.get("current_player", -1)
     difficulty = data.get("difficulty", "hard").lower()
+    if difficulty not in ("easy", "medium", "hard"):
+        return jsonify({"error": "Invalid difficulty"}), 400
 
     # FIX 4: Validate current_player
     if current_player not in (-1, 1):
