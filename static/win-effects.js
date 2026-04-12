@@ -2,7 +2,6 @@
  * WinEffects Module: Randomized Cyberpunk Finishers (High-Fidelity Overhaul)
  */
 const WinEffects = {
-    activeEffect: null,
 
     triggerRandom(winner, winningLine) {
         // Find all tokens that ARE NOT in the winning line (losing tokens)
@@ -18,7 +17,6 @@ const WinEffects = {
         ];
 
         const chosen = effects[Math.floor(Math.random() * effects.length)];
-        this.activeEffect = chosen;
         chosen();
     },
 
@@ -113,6 +111,5 @@ const WinEffects = {
         });
         
         document.querySelectorAll('.particle-data').forEach(p => p.remove());
-        this.activeEffect = null;
     }
 };

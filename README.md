@@ -333,7 +333,7 @@ Set a threshold (e.g. $20/month) — GCP will email you before you're surprised.
 
 ### 🚀 Future Roadmap & TODOs
 - [x] **Secure Connection (HTTPS):** Domain `c4star.com` registered and proxied through Cloudflare. Origin secured with a Cloudflare Origin Certificate on nginx (Full Strict SSL mode). HTTP redirects to HTTPS.
-- [x] **Monetization:** Ko-fi donation button (`ko-fi.com/c4star`) shown post-game. Carbon Ads application pending.
+- [x] **Monetization:** Ko-fi donation button (`ko-fi.com/c4star`) shown post-game. Facebook share button with pre-populated result message. Carbon Ads application pending.
 - [ ] **User Authentication:** Add a login system to restrict access and save player game statistics.
 - [ ] **Move History:** Add a feature to download or replay past games from the UI.
 - [x] **Real-time Analytics:** BigQuery player analytics implemented — tracks visits, games, win/loss, moves per IP. Admin dashboard at `/admin/<token>`.
@@ -345,10 +345,20 @@ Set a threshold (e.g. $20/month) — GCP will email you before you're surprised.
 ## Version History
 
 ### [v1.9.0] - 2026-04-12
+
+#### Web App
+- **Dynamic drop audio** (`audio-engine.js`): `playSwoosh(row)` now scales with drop depth. Bottom-row pieces land with a deep sub-thud (60–180 Hz sine, 0.43 s decay); top-row pieces are a light airy hiss. ±10% pitch jitter makes every drop sound unique.
+- **Random piece visuals** (`style.css`, `script.js`): ring spin speed randomised per piece (2.5–5.5 s) via `--ring-speed` CSS custom property. 15% of pieces trigger a `.chip-charged` electric-flash effect on placement (white-blue filter pulse + fast ring burst).
+- **Facebook JS SDK share** (`index.html`, `script.js`, `app.py`): Share button posts a pre-populated win/loss/draw message with move count and `#Connect4AI` hashtag via `FB.ui()`. CSP updated for `connect.facebook.net`, `graph.facebook.com`, and `frame-src https://www.facebook.com`.
 - **HTTPS & Custom Domain:** Site live at `https://c4star.com` via Cloudflare proxy with Full Strict SSL. Cloudflare Origin Certificate installed on nginx. HTTP auto-redirects to HTTPS.
 - **nginx Rate Limiting Fix:** Rate limit raised from 5 req/min to 60 req/min (burst 30) to support full games without 503 errors. Real visitor IP now extracted from `CF-Connecting-IP` header — previously all users shared one Cloudflare IP bucket.
-- **Ko-fi Donation Button:** Post-game coffee button linking to `ko-fi.com/c4star`. Dismisses on restart.
-- **Deploy Backup Fix:** Backup now runs before disk cleanup (previously wiped before saving). Retains last 3 archives. Excludes `.venv.backup` and `*.pt.*` files to prevent 800MB+ bloat.
+- **Difficulty levels** (`app.py`, `script.js`): Easy (2/3 random moves, auto-hints), Medium (1/3 random), Hard (full MCTS). Level description shown below selector.
+- **BigQuery difficulty tracking** (`bigquery_tracker.py`, `app.py`): `easy_games`, `medium_games`, `hard_games` columns added via `ALTER TABLE … ADD COLUMN IF NOT EXISTS`. Admin dashboard updated with 3 new stat cards and columns.
+- **Ko-fi + Facebook share post-game:** Ko-fi donation button and FB share shown together after each game ends.
+- **Model cold-start fix** (`app.py`): ONNX preload moved to module level so Gunicorn workers compile the model at startup, not on first request.
+- **"AI is thinking" loop fix** (`script.js`): `AbortController` cancels any pending hint fetch when the player clicks a column, eliminating the race between hint and move requests on a single Gunicorn sync worker.
+- **Bug fixes** (`app.py`): `mcts_probs` field name unified to `probs` (random-move path was returning a different key, breaking the heatmap). Stats cache write made thread-safe with a dedicated lock. Removed unused `urllib.request` / `json as _json` imports and dead `OpenVINOModel.eval()` / `policy_output` / `value_output` attributes. `activeEffect` dead state removed from `win-effects.js`.
+- **Deploy backup fix** (`deploy.yml`): Cleanup runs before backup. Retains last backup. Excludes `.venv.backup` and `*.pt.*` files to prevent 800 MB+ bloat.
 
 ### [v1.8.0] - 2026-04-11/12
 

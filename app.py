@@ -8,8 +8,6 @@ import torch
 import numpy as np
 import pathlib
 import threading
-import urllib.request
-import json as _json
 from collections import OrderedDict # FIX 6
 from flask import Flask, request, jsonify, render_template
 from flask_limiter import Limiter
@@ -22,7 +20,7 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-VERSION = "1.8.0"
+VERSION = "1.9.0"
 LAST_COMMIT = "2026-04-10 00:15 UTC"
 
 from mcts import Connect4, run_mcts_simulations
@@ -115,21 +113,15 @@ class OpenVINOModel:
             config={"PERFORMANCE_HINT": "LATENCY"}
         )
         self.infer_request = self.compiled_model.create_infer_request()
-        self.policy_output = self.compiled_model.output("policy")
-        self.value_output = self.compiled_model.output("value")
 
     def __call__(self, x: torch.Tensor):
         x_np = x.cpu().numpy()
         with self._lock: # FIX 5: OpenVINO thread safety
-            # Switch to asynchronous pattern for future concurrency
             self.infer_request.start_async(inputs={0: x_np})
             self.infer_request.wait()
             policy = self.infer_request.get_output_tensor(0).data
             value = self.infer_request.get_output_tensor(1).data
         return torch.from_numpy(policy), torch.from_numpy(value)
-
-    def eval(self):
-        pass
 
 def get_model(checkpoint_path):
     """Loads a compiled OpenVINO `.onnx` file or retrieves it from cache."""
@@ -302,7 +294,7 @@ def get_move():
         valid_cols = [c for c in range(7) if game.board[0][c] == 0]
         best_move = int(np.random.choice(valid_cols))
         print(f"[Difficulty:{difficulty}] Random move → col {best_move}")
-        return jsonify({"move": best_move, "mcts_probs": [0.0]*7, "winning_cells": []})
+        return jsonify({"move": best_move, "probs": [0.0]*7, "winning_cells": []})
 
     print(f"Evaluating board using {checkpoint_name} for player {current_player} (sims={simulations})...")
 
@@ -512,14 +504,16 @@ def health():
 
 # Simple 5-minute in-memory cache so every page load doesn't bill a BQ query
 _stats_cache = {"data": None, "expires": 0}
+_stats_cache_lock = threading.Lock()
 
 @app.route("/api/stats")
 @limiter.limit("30 per minute")
 def api_stats():
     """Return global game totals from BigQuery, cached for 5 minutes."""
     now = time.time()
-    if _stats_cache["data"] and now < _stats_cache["expires"]:
-        return jsonify(_stats_cache["data"])
+    with _stats_cache_lock:
+        if _stats_cache["data"] and now < _stats_cache["expires"]:
+            return jsonify(_stats_cache["data"])
 
     if not bigquery_tracker._enabled:
         return jsonify({"total_games": None})
@@ -544,8 +538,9 @@ def api_stats():
         print(f"[api/stats] BQ query failed: {e}")
         return jsonify({"total_games": None})
 
-    _stats_cache["data"]    = data
-    _stats_cache["expires"] = now + 300  # 5 minutes
+    with _stats_cache_lock:
+        _stats_cache["data"]    = data
+        _stats_cache["expires"] = now + 300  # 5 minutes
     return jsonify(data)
 
 @app.route("/api/geoip")
