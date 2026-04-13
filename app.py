@@ -20,8 +20,8 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-VERSION = "1.9.1"
-LAST_COMMIT = "2026-04-10 00:15 UTC"
+VERSION = "1.9.2"
+LAST_COMMIT = "2026-04-13 00:00 UTC"
 
 from mcts import Connect4, run_mcts_simulations
 import background_manager

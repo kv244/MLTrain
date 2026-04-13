@@ -30,6 +30,7 @@ const DIFF_DESC = {
 };
 
 let _hintAbortController = null;
+let _hintTimerId = null;
 
 // DOM Elements
 const _board = document.getElementById('c4Board');
@@ -190,7 +191,12 @@ async function handleColumnClick(c) {
     // Check if row 0 (top) is empty
     if (board[0][c] !== 0) return;
 
-    // Cancel any pending hint request so it doesn't queue behind the AI move
+    // Cancel the pending auto-hint timer (prevents stale hint from firing mid-assessment)
+    if (_hintTimerId !== null) {
+        clearTimeout(_hintTimerId);
+        _hintTimerId = null;
+    }
+    // Cancel any in-flight hint request so it doesn't queue behind the AI move
     if (_hintAbortController) {
         _hintAbortController.abort();
         _hintAbortController = null;
@@ -550,7 +556,8 @@ async function triggerAiMove() {
         const res = await fetch('/api/move', {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify(payload)
+            body: JSON.stringify(payload),
+            signal: AbortSignal.timeout(90000)  // 90-second watchdog — prevents permanent "AI is thinking" hang
         });
 
         if (!res.ok) {
@@ -575,6 +582,7 @@ async function triggerAiMove() {
         const row = getLowestEmptyRow(col);
         if (row === -1) {
             console.error("AI tried to play in full column", col);
+            endGame("AI Error");
             return;
         }
 
@@ -666,7 +674,8 @@ function updateTurnUI() {
 
         // Auto-hint on easy difficulty
         if (_difficultySelect.value === 'easy') {
-            setTimeout(() => {
+            _hintTimerId = setTimeout(() => {
+                _hintTimerId = null;
                 if (!gameOver && currentPlayer === humanPlayer) getHint();
             }, 500);
         }

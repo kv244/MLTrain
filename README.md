@@ -344,6 +344,21 @@ Set a threshold (e.g. $20/month) — GCP will email you before you're surprised.
 
 ## Version History
 
+### [v1.9.2] - 2026-04-13
+
+#### Web App (`script.js`)
+- **"AI is thinking" permanent hang — 3 root causes fixed:**
+  - **Missing UI cleanup on invalid AI move**: `triggerAiMove()` did a bare `return` when `getLowestEmptyRow(col) === -1` (AI returned a full column), leaving the board permanently disabled with the "AI is thinking…" badge. Fixed: now calls `endGame("AI Error")`.
+  - **Stale auto-hint timer race (Easy difficulty)**: `updateTurnUI()` scheduled `getHint()` 500 ms after the human's turn started. If `fetchAssessment` (MCTS + Gemini) took longer than 500 ms — which it routinely does — the timer fired while `currentPlayer` hadn't flipped yet, causing a spurious `/api/move` request to reach the server concurrently with the real AI move. Fixed: timer ID saved in `_hintTimerId`; `clearTimeout(_hintTimerId)` added at the top of `handleColumnClick` alongside the existing `AbortController` abort.
+  - **No fetch timeout on `/api/move`**: Without a timeout, any server-side hang (e.g. OpenVINO stall) left the client waiting forever. Fixed: added `signal: AbortSignal.timeout(90000)` — 90-second watchdog on the AI move fetch.
+
+### [v1.9.1] - 2026-04-13
+
+#### Web App
+- **Error 502 fix**: cap MCTS sims at 1200 server-side (was 5000); adaptive boost ceiling now matches; frontend hard drops from 2000→800, medium 800→400 to prevent gunicorn timeouts on contested mid-game positions.
+- **Facebook share button fix**: replaced deprecated `FB.ui()` + SDK dependency with plain `window.open()` sharer URL; removed FB SDK script tag, `fb-root` div, `fbAsyncInit`; cleaned up CSP accordingly.
+- **Difficulty lock mid-game**: AI difficulty selector is now disabled during a game (`startGame` disables, `endGame` re-enables); added `:disabled` visual style (opacity 0.4).
+
 ### [v1.9.0] - 2026-04-12
 
 #### Web App
