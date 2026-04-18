@@ -8,7 +8,7 @@ import vertexai
 from vertexai.vision_models import ImageGenerationModel
 from dotenv import load_dotenv
 
-load_dotenv()
+load_dotenv(pathlib.Path(__file__).parent / ".env")
 
 # Configuration
 BG_PATH    = pathlib.Path("static/cyberpunk_bg.png").resolve()

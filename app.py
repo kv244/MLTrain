@@ -18,8 +18,9 @@ import openvino as ov
 from google import genai
 from google.genai import types as genai_types
 from dotenv import load_dotenv
+import pathlib as _pathlib
 
-load_dotenv()
+load_dotenv(_pathlib.Path(__file__).parent / ".env")
 
 VERSION = "2.0.2"
 LAST_COMMIT = "2026-04-18 00:00 UTC"
