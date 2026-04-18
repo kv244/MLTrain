@@ -22,7 +22,7 @@ import pathlib as _pathlib
 
 load_dotenv(_pathlib.Path(__file__).parent / ".env")
 
-VERSION = "2.0.2"
+VERSION = "2.1.2"
 LAST_COMMIT = "2026-04-18 00:00 UTC"
 
 from mcts import Connect4, run_mcts_simulations
