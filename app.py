@@ -541,6 +541,27 @@ def assess_move():
 def health():
     return jsonify({"status": "ok"}), 200
 
+@app.route("/sitemap.xml")
+@limiter.exempt
+def sitemap():
+    xml = (
+        '<?xml version="1.0" encoding="UTF-8"?>'
+        '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">'
+        '<url>'
+        '<loc>https://c4star.com/</loc>'
+        '<changefreq>weekly</changefreq>'
+        '<priority>1.0</priority>'
+        '</url>'
+        '</urlset>'
+    )
+    return app.response_class(xml, mimetype="application/xml")
+
+@app.route("/robots.txt")
+@limiter.exempt
+def robots():
+    txt = "User-agent: *\nAllow: /\nSitemap: https://c4star.com/sitemap.xml\n"
+    return app.response_class(txt, mimetype="text/plain")
+
 # Simple 5-minute in-memory cache so every page load doesn't bill a BQ query
 _stats_cache = {"data": None, "expires": 0}
 _stats_cache_lock = threading.Lock()
@@ -626,6 +647,50 @@ def api_recent_winner():
     with _winner_cache_lock:
         _winner_cache["data"]    = data
         _winner_cache["expires"] = now + 60  # 60-second cache
+    return jsonify(data)
+
+
+_leaderboard_cache = {"data": None, "expires": 0}
+_leaderboard_cache_lock = threading.Lock()
+
+@app.route("/api/leaderboard")
+@limiter.limit("30 per minute")
+def api_leaderboard():
+    """Return the 5 most recent player wins, cached for 60 seconds."""
+    now = time.time()
+    with _leaderboard_cache_lock:
+        if _leaderboard_cache["data"] and now < _leaderboard_cache["expires"]:
+            return jsonify(_leaderboard_cache["data"])
+
+    if not bigquery_tracker._enabled or not bigquery_tracker._win_table_ref:
+        return jsonify({"winners": []})
+
+    try:
+        ref = bigquery_tracker._win_table_ref
+        rows = list(bigquery_tracker._client.query(f"""
+            SELECT name, difficulty, simulations, moves,
+                   FORMAT_TIMESTAMP('%b %d %Y', recorded_at) AS date
+            FROM `{ref}`
+            ORDER BY recorded_at DESC
+            LIMIT 5
+        """).result())
+        data = {"winners": [
+            {
+                "name":        r.name,
+                "difficulty":  r.difficulty,
+                "simulations": int(r.simulations),
+                "moves":       int(r.moves),
+                "date":        r.date,
+            }
+            for r in rows
+        ]}
+    except Exception as e:
+        print(f"[api/leaderboard] BQ query failed: {e}")
+        return jsonify({"winners": []})
+
+    with _leaderboard_cache_lock:
+        _leaderboard_cache["data"]    = data
+        _leaderboard_cache["expires"] = now + 60
     return jsonify(data)
 
 

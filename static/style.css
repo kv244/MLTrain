@@ -1015,6 +1015,61 @@ For now, two prominent corners are very Manga-style. */
     color: #666;
 }
 
+/* ── Leaderboard modal ───────────────────────────────────────────────────── */
+.leaderboard-modal-box { min-width: 320px; max-width: 480px; width: 92vw; }
+
+.lb-list {
+    width: 100%;
+    margin-top: 0.8rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+.lb-row {
+    display: grid;
+    grid-template-columns: 2rem 1fr auto;
+    grid-template-rows: auto auto;
+    column-gap: 0.6rem;
+    align-items: center;
+    background: rgba(0, 229, 255, 0.04);
+    border: 1px solid rgba(0, 229, 255, 0.1);
+    border-radius: 8px;
+    padding: 0.55rem 0.8rem;
+}
+.lb-rank {
+    grid-row: 1 / 3;
+    font-size: 1rem;
+    font-weight: 700;
+    color: var(--neon-cyan);
+    opacity: 0.7;
+}
+.lb-name {
+    font-size: 0.95rem;
+    font-weight: 600;
+    color: var(--text-heading);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.lb-date {
+    grid-row: 1 / 3;
+    font-size: 0.7rem;
+    color: #4b5563;
+    text-align: right;
+    white-space: nowrap;
+}
+.lb-meta {
+    font-size: 0.75rem;
+    color: #6b7280;
+    text-transform: capitalize;
+}
+.lb-loading, .lb-empty {
+    text-align: center;
+    color: #6b7280;
+    font-size: 0.9rem;
+    padding: 1rem 0;
+}
+
 /* SEO footer — structured content for crawlers, cyberpunk-tinted */
 .seo-footer {
     width: 100%;

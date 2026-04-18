@@ -999,6 +999,42 @@ async function initWelcomeMessage() {
     }, 5000);
 }
 
+// ── Leaderboard modal ─────────────────────────────────────────────────────────
+(function () {
+    const modal = document.getElementById('leaderboardModal');
+    const btn   = document.getElementById('btnLeaderboard');
+    const close = document.getElementById('lbCloseBtn');
+    const list  = document.getElementById('lbList');
+    if (!modal || !btn) return;
+
+    function open() {
+        modal.classList.remove('hidden');
+        list.innerHTML = '<p class="lb-loading">Loading…</p>';
+        fetch('/api/leaderboard')
+            .then(r => r.json())
+            .then(data => {
+                const winners = data.winners || [];
+                if (!winners.length) {
+                    list.innerHTML = '<p class="lb-empty">No winners recorded yet. Be the first!</p>';
+                    return;
+                }
+                list.innerHTML = winners.map((w, i) => `
+                    <div class="lb-row">
+                        <span class="lb-rank">#${i + 1}</span>
+                        <span class="lb-name">${w.name}</span>
+                        <span class="lb-meta">${w.difficulty} · ${w.simulations} sims · ${w.moves} moves</span>
+                        <span class="lb-date">${w.date}</span>
+                    </div>`).join('');
+            })
+            .catch(() => { list.innerHTML = '<p class="lb-empty">Could not load data.</p>'; });
+    }
+
+    btn.addEventListener('click', open);
+    close.addEventListener('click', () => modal.classList.add('hidden'));
+    modal.addEventListener('click', e => { if (e.target === modal) modal.classList.add('hidden'); });
+    document.addEventListener('keydown', e => { if (e.key === 'Escape') modal.classList.add('hidden'); });
+}());
+
 // ── Help modal ────────────────────────────────────────────────────────────────
 (function () {
     const modal  = document.getElementById('helpModal');

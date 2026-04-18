@@ -128,6 +128,11 @@
                 <button id="btnUndo" class="btn outline-btn" disabled>Undo Move</button>
              </div>
 
+             <!-- Leaderboard -->
+             <div class="action-buttons mt-mid">
+                <button id="btnLeaderboard" class="btn outline-btn">🏆 Leaderboard</button>
+             </div>
+
              <!-- Stats Panel -->
              <div class="stats-panel">
                 <h3 class="stats-title">Session Stats</h3>
@@ -247,6 +252,19 @@
             </div>
         </div>
     </footer>
+
+    <!-- Leaderboard Modal -->
+    <div id="leaderboardModal" class="win-modal hidden" role="dialog" aria-modal="true" aria-labelledby="lbModalTitle">
+        <div class="win-modal-box leaderboard-modal-box">
+            <div class="win-modal-icon">🏆</div>
+            <h2 id="lbModalTitle" class="win-modal-title">Hall of Fame</h2>
+            <p class="win-modal-desc">Latest players who beat the AI</p>
+            <div id="lbList" class="lb-list">
+                <p class="lb-loading">Loading…</p>
+            </div>
+            <button id="lbCloseBtn" class="btn primary-btn" style="margin-top:1.2rem">Close</button>
+        </div>
+    </div>
 
     <!-- Win Save Modal -->
     <div id="winSaveModal" class="win-modal hidden" role="dialog" aria-modal="true" aria-labelledby="winModalTitle">
