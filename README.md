@@ -423,7 +423,7 @@ Set a threshold (e.g. $20/month) — GCP will email you before you're surprised.
 - **Geo-IP** (`app.py`, `script.js`): geolocation-db.com added to CSP `connect-src`; browser now calls it directly so the client's real IP is used. `/api/geoip` simplified to return only the wallpaper renewal countdown. Welcome toast shows on every page load (sessionStorage guard removed).
 - **BigQuery analytics** (`bigquery_tracker.py`, `app.py`): new `connect4.player_stats` table on `gen-lang-client-0269772194`. Tracks IP, country, first/last seen, visits, games, wins, draws, total moves. `MERGE` upsert on every page load and game end. All BQ calls are fire-and-forget daemon threads.
 - **Admin dashboard** (`/admin/<token>`): protected by `ADMIN_TOKEN` env var (404 on mismatch). Shows grand-total stat cards, daily new-visitor table (last 30 days), and full per-IP breakdown with win% bar and new/returning badge.
-- **`google.genai` migration** (`app.py`, `background_manager.py`): migrated from the deprecated `google.generativeai` package to `google.genai` (`google-genai` in `requirements.txt`).
+- **`google.genai` migration** (`app.py`, `background_manager.py`): migrated from the deprecated `google.generativeai` and `vertexai` packages to the unified `google.genai` SDK. This resolves the June 2025 deprecation of the legacy Vertex AI image generation SDK. The background renewal process now uses the unified client with `vertexai=True` to access Imagen 3.0.
 - **Security**: removed accidentally committed SSH private key (`id_deploy_final`); added `id_*` and `*.pem` patterns to `.gitignore`.
 
 ### [v1.7.0] - 2026-04-10

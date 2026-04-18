@@ -4,8 +4,7 @@ import datetime
 import pathlib
 import threading
 from google import genai
-import vertexai
-from vertexai.vision_models import ImageGenerationModel
+from google.genai import types
 from dotenv import load_dotenv
 
 load_dotenv(pathlib.Path(__file__).parent / ".env")
@@ -24,7 +23,7 @@ def is_background_stale(days=7):
     return age >= days
 
 def update_background():
-    """Generates a new background using Gemini + Vertex AI Imagen."""
+    """Generates a new background using Gemini + Vertex AI Imagen (via unified genai SDK)."""
     PROJECT_ID    = os.environ.get("GCP_PROJECT_ID")
     GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
 
@@ -40,7 +39,7 @@ def update_background():
     
     tmp_path = None
     try:
-        # 1. Generate a vivid prompt via Gemini
+        # 1. Generate a vivid prompt via Gemini (using Google AI Studio backend)
         client = genai.Client(api_key=GEMINI_API_KEY)
         system_prompt = (
             "You are a creative prompt engineer for an image generation model. "
@@ -55,16 +54,32 @@ def update_background():
         image_prompt = response.text.strip()
         print(f"[BackgroundManager] Gemini prompt: {image_prompt}")
 
-        # 2. Generate Image via Vertex AI Imagen
-        vertexai.init(project=PROJECT_ID, location=LOCATION)
-        generation_model = ImageGenerationModel.from_pretrained("imagen-3.0-generate-001")
+        # 2. Generate Image via Vertex AI Imagen (using Vertex AI backend via genai SDK)
+        # Note: vertexai=True uses the Vertex AI backend for this client.
+        vertex_client = genai.Client(
+            vertexai=True,
+            project=PROJECT_ID,
+            location=LOCATION
+        )
         
-        print("[BackgroundManager] Requesting image from Vertex AI Imagen...")
-        images = generation_model.generate_images(prompt=image_prompt, number_of_images=1)
+        print("[BackgroundManager] Requesting image from Vertex AI Imagen (v3)...")
+        res_image = vertex_client.models.generate_images(
+            model="imagen-3.0-generate-001",
+            prompt=image_prompt,
+            config=types.GenerateImagesConfig(
+                number_of_images=1,
+                aspect_ratio="16:9"
+            )
+        )
         
+        if not res_image.generated_images:
+            print("[BackgroundManager] Error: No images were generated (possibly blocked by safety filters).")
+            return False
+
         # 3. Save the image atomically
         tmp_path = BG_PATH.with_suffix(".tmp")
-        images[0].save(str(tmp_path))
+        # response.generated_images[0].image is a PIL.Image if Pillow is installed
+        res_image.generated_images[0].image.save(str(tmp_path))
         tmp_path.replace(BG_PATH)
         
         print("[BackgroundManager] Background updated successfully.")
