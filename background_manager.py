@@ -11,10 +11,8 @@ from dotenv import load_dotenv
 load_dotenv()
 
 # Configuration
-BG_PATH = pathlib.Path("static/cyberpunk_bg.png").resolve()
-GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
-PROJECT_ID = os.environ.get("GCP_PROJECT_ID")
-LOCATION = "us-central1"
+BG_PATH    = pathlib.Path("static/cyberpunk_bg.png").resolve()
+LOCATION   = "us-central1"
 
 def is_background_stale(days=7):
     """Returns True if the background image is older than 'days'."""
@@ -27,12 +25,15 @@ def is_background_stale(days=7):
 
 def update_background():
     """Generates a new background using Gemini + Vertex AI Imagen."""
+    PROJECT_ID    = os.environ.get("GCP_PROJECT_ID")
+    GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
+
     if not PROJECT_ID:
         print("[BackgroundManager] Error: GCP_PROJECT_ID not set")
         return False
 
     if not GEMINI_API_KEY:
-        print("[BackgroundManager] Error: GEMINI_API_KEY not found in .env")
+        print("[BackgroundManager] Error: GEMINI_API_KEY not set in environment")
         return False
 
     print("[BackgroundManager] Starting background renewal...")

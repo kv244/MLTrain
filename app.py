@@ -871,8 +871,23 @@ if _initial_models:
     get_model(_initial_models[0])
 
 # Generate a fresh coffee-button tagline on each restart via Gemini.
-_KOFI_DEFAULT = "☕ enjoyed the game? buy me a coffee"
-_kofi_tagline  = _KOFI_DEFAULT
+_KOFI_FALLBACKS = [
+    "☕ You beat the AI — fuel the dev!",
+    "☕ The AI is sulking. Cheer it up with a coffee?",
+    "☕ Victory tastes good. Coffee tastes better.",
+    "☕ You won. The dev is still coding. Send help.",
+    "☕ Outsmarted an AI — that deserves a coffee.",
+    "☕ The AI demands a rematch. The dev demands espresso.",
+    "☕ Neural networks don't run on air. Neither do devs.",
+    "☕ You cracked the AI. Now crack open a coffee for the dev?",
+]
+
+def _pick_fallback():
+    import hashlib, datetime
+    seed = hashlib.md5(datetime.date.today().isoformat().encode()).digest()[0]
+    return _KOFI_FALLBACKS[seed % len(_KOFI_FALLBACKS)]
+
+_kofi_tagline = _pick_fallback()
 
 def _gen_kofi_tagline():
     global _kofi_tagline
@@ -885,7 +900,7 @@ def _gen_kofi_tagline():
                 "Write a single short, witty, playful line (max 10 words, no quotes) "
                 "inviting someone to buy the developer a coffee after they beat a "
                 "Connect 4 AI. Include the ☕ emoji. Be creative and vary the phrasing "
-                "each time — never use 'buy me a coffee'."
+                "each time — never say 'buy me a coffee'."
             ),
             config=genai_types.GenerateContentConfig(
                 http_options=genai_types.HttpOptions(timeout=8000)
@@ -896,7 +911,7 @@ def _gen_kofi_tagline():
             _kofi_tagline = line
             print(f"[App] Kofi tagline: {_kofi_tagline}")
     except Exception as exc:
-        print(f"[App] Kofi tagline generation failed: {exc}")
+        print(f"[App] Kofi tagline generation failed (using fallback): {exc}")
 
 threading.Thread(target=_gen_kofi_tagline, daemon=True).start()
 
