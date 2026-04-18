@@ -2,14 +2,13 @@ import os
 import glob
 import re
 import time
-import math
 import csv
 import json
 import torch
 import numpy as np
 import pathlib
 import threading
-from collections import OrderedDict # FIX 6
+from collections import OrderedDict
 from flask import Flask, request, jsonify, render_template
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
@@ -18,30 +17,28 @@ import openvino as ov
 from google import genai
 from google.genai import types as genai_types
 from dotenv import load_dotenv
-import pathlib as _pathlib
 
-load_dotenv(_pathlib.Path(__file__).parent / ".env")
+load_dotenv(pathlib.Path(__file__).parent / ".env")
 
 def _git_rev() -> str:
     try:
         import subprocess
         return subprocess.check_output(
             ["git", "rev-parse", "--short", "HEAD"],
-            cwd=_pathlib.Path(__file__).parent,
+            cwd=pathlib.Path(__file__).parent,
             stderr=subprocess.DEVNULL,
         ).decode().strip()
     except Exception:
         return "unknown"
 
 VERSION = _git_rev()
-LAST_COMMIT = "2026-04-18 00:00 UTC"
 
 from mcts import Connect4, run_mcts_simulations
 import background_manager
 import bigquery_tracker
 
 app = Flask(__name__)
-app.config['MAX_CONTENT_LENGTH'] = 64 * 1024  # FIX 8: 64 KB limit
+app.config['MAX_CONTENT_LENGTH'] = 64 * 1024
 # x_for=1: trust exactly 1 proxy hop (nginx).
 # Only works correctly because nginx strips client X-Forwarded-For above.
 app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1, x_prefix=1)
@@ -93,8 +90,8 @@ def _resolve_checkpoint(name: str):
 
 # Cache models to avoid reloading them constantly
 # This is a small optimization for web responsiveness.
-MAX_LOADED_MODELS = 3 # FIX 6: LRU cap
-LOADED_MODELS = OrderedDict() # FIX 6
+MAX_LOADED_MODELS = 3
+LOADED_MODELS = OrderedDict()
 device = torch.device("cpu") # PyTorch tensor device for CPU memory handling
 
 def get_ov_device():
@@ -110,27 +107,19 @@ class OpenVINOModel:
     def __init__(self, model_path: str):
         self._lock = threading.Lock()
 
-        available_devices = _ov_core.available_devices
-        if "NPU" in available_devices:
-            device = "NPU"
-        elif "GPU" in available_devices:
-            device = "GPU"
-        else:
-            device = "CPU"
-
-        print(f"OpenVINO initializing on device: {device} (Available: {available_devices})")
+        print(f"OpenVINO initializing on device: {GLOBAL_OV_DEVICE}")
 
         ov_model = _ov_core.read_model(model=model_path)
         self.compiled_model = _ov_core.compile_model(
             model=ov_model,
-            device_name=device,
+            device_name=GLOBAL_OV_DEVICE,
             config={"PERFORMANCE_HINT": "LATENCY"}
         )
         self.infer_request = self.compiled_model.create_infer_request()
 
     def __call__(self, x: torch.Tensor):
         x_np = x.cpu().numpy()
-        with self._lock: # FIX 5: OpenVINO thread safety
+        with self._lock:
             self.infer_request.start_async(inputs={0: x_np})
             self.infer_request.wait()
             policy = self.infer_request.get_output_tensor(0).data
@@ -144,7 +133,7 @@ def get_model(checkpoint_path):
             try:
                 model = OpenVINOModel(checkpoint_path)
                 LOADED_MODELS[checkpoint_path] = model
-                # FIX 6: Evict oldest if cap reached
+              
                 if len(LOADED_MODELS) > MAX_LOADED_MODELS:
                     LOADED_MODELS.popitem(last=False)
             except Exception as e:
@@ -255,7 +244,7 @@ def list_models():
 def get_move():
     """Calculates the best move using the model + MCTS search."""
     data = request.json
-    if not data: return jsonify({"error": "Missing or invalid JSON"}), 400 # FIX 1
+    if not data: return jsonify({"error": "Missing or invalid JSON"}), 400
 
     checkpoint_name = data.get("model", "")
     board_state = data.get("board", [])
@@ -264,7 +253,7 @@ def get_move():
     if difficulty not in ("easy", "medium", "hard"):
         return jsonify({"error": "Invalid difficulty"}), 400
 
-    # FIX 4: Validate current_player
+  
     if current_player not in (-1, 1):
         return jsonify({"error": "Invalid current_player"}), 400
 
@@ -283,7 +272,7 @@ def get_move():
     if board_arr.shape != (6, 7) or not np.all(np.isin(board_arr, [-1, 0, 1])):
         return jsonify({"error": "Invalid board state"}), 400
 
-    # FIX 7: board piece-count validation
+  
     count_p1 = int(np.sum(board_arr == 1))
     count_p2 = int(np.sum(board_arr == -1))
     if abs(count_p1 - count_p2) > 1:
@@ -397,19 +386,19 @@ gemini_client  = genai.Client(api_key=GEMINI_API_KEY) if GEMINI_API_KEY else Non
 def assess_move():
     """Evaluates a specific move against the AI's best recommended move."""
     data = request.json
-    if not data: return jsonify({"error": "Missing or invalid JSON"}), 400 # FIX 1
+    if not data: return jsonify({"error": "Missing or invalid JSON"}), 400
 
     checkpoint_name = data.get("model", "")
     board_state = data.get("board", []) # This should be the board BEFORE the move
     move = data.get("move", -1)
     
-    # FIX 2: validate move param
+  
     if not isinstance(move, int) or move < 0 or move >= 7:
         return jsonify({"error": "Invalid move"}), 400
 
     current_player = data.get("current_player", 1)
 
-    # FIX 4: Validate current_player
+  
     if current_player not in (-1, 1):
         return jsonify({"error": "Invalid current_player"}), 400
 
@@ -436,11 +425,11 @@ def assess_move():
     game.board = board_arr
     game.current_player = current_player
 
-    # FIX 8: Board full guard
+  
     if not game.get_valid_moves():
         return jsonify({"error": "Board is full — no moves available"}), 400
 
-    # FIX 7: Move playable guard
+  
     if move not in game.get_valid_moves():
         return jsonify({"error": "Column is full or invalid"}), 400
 
@@ -859,7 +848,6 @@ def bg_status():
         "mtime":       mtime,
     })
 
-# FIX 9: security response headers
 @app.after_request
 def set_security_headers(response):
     # Admin page uses inline <style>/<script> and is already gated by a secret

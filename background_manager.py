@@ -1,8 +1,6 @@
 import os
 import time
-import datetime
 import pathlib
-import threading
 from google import genai
 from google.genai import types
 from dotenv import load_dotenv
