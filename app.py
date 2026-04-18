@@ -22,7 +22,18 @@ import pathlib as _pathlib
 
 load_dotenv(_pathlib.Path(__file__).parent / ".env")
 
-VERSION = "2.1.2"
+def _git_rev() -> str:
+    try:
+        import subprocess
+        return subprocess.check_output(
+            ["git", "rev-parse", "--short", "HEAD"],
+            cwd=_pathlib.Path(__file__).parent,
+            stderr=subprocess.DEVNULL,
+        ).decode().strip()
+    except Exception:
+        return "unknown"
+
+VERSION = _git_rev()
 LAST_COMMIT = "2026-04-18 00:00 UTC"
 
 from mcts import Connect4, run_mcts_simulations
