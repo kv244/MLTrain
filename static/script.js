@@ -936,8 +936,10 @@ async function initWelcomeMessage() {
         try {
             const info = await infoRes.value.json();
             const d = info.wallpaper_days_left;
-            if (d !== null && d !== undefined && d > 0) {
-                wallpaperNote = ` · ${t(s.wallpaper_renews, { n: d })}`;
+            if (d !== null && d !== undefined) {
+                wallpaperNote = d > 0
+                    ? ` · ${t(s.wallpaper_renews, { n: d })}`
+                    : ` · ${s.wallpaper_soon || 'wallpaper refreshing soon'}`;
             }
         } catch (_) {}
     }

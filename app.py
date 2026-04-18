@@ -21,7 +21,7 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-VERSION = "2.0.1"
+VERSION = "2.0.2"
 LAST_COMMIT = "2026-04-18 00:00 UTC"
 
 from mcts import Connect4, run_mcts_simulations
@@ -633,6 +633,7 @@ _ENGLISH_STRINGS = {
     "greeting":         "Thank you for joining me from {country}!",
     "games_globally":   "{n} games played globally",
     "wallpaper_renews": "wallpaper renews in {n} days",
+    "wallpaper_soon":   "wallpaper refreshing soon",
     "last_winner":      "Last winner",
     "thoughts":         "thoughts",
     "moves":            "moves",
