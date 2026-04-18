@@ -918,14 +918,21 @@ def _gen_kofi_tagline():
 
 threading.Thread(target=_gen_kofi_tagline, daemon=True).start()
 
-# Startup check for stale background image
+# Startup check for stale background image — reuses _bg_update_state so the
+# admin "running" guard blocks concurrent manual triggers during boot.
 if background_manager.is_background_stale():
     print("[App] Stale background detected, triggering update...")
     def _safe_bg_update():
+        _bg_update_state["running"] = True
+        _bg_update_state["last_result"] = None
         try:
-            background_manager.update_background()
+            ok = background_manager.update_background()
+            _bg_update_state["last_result"] = "ok" if ok else "error"
         except Exception as e:
             print(f"[App] Background update failed: {e}")
+            _bg_update_state["last_result"] = "error"
+        finally:
+            _bg_update_state["running"] = False
     threading.Thread(target=_safe_bg_update, daemon=True).start()
 
 if __name__ == "__main__":

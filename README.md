@@ -160,7 +160,7 @@ After=network.target
 [Service]
 User=<VM_USER>
 WorkingDirectory=/home/<VM_USER>/mltrain
-ExecStart=/home/<VM_USER>/mltrain/.venv/bin/gunicorn -w 1 -b 127.0.0.1:5000 app:app
+ExecStart=/home/<VM_USER>/mltrain/.venv/bin/gunicorn --workers 1 --bind 127.0.0.1:5000 --timeout 120 --graceful-timeout 60 app:app
 Restart=always
 
 [Install]
@@ -172,6 +172,8 @@ Then enable it:
 sudo systemctl enable connect4
 sudo systemctl start connect4
 ```
+
+> **Important — keep `--workers 1`**: `_bg_update_state` (admin background regeneration status) and the flask-limiter rate counters are stored in process memory. With `--workers 2+`, each worker has its own independent copy — a POST to worker A sets state that worker B never sees, causing the admin UI to show "Generation failed" even when the image generated successfully. If traffic grows enough to need multiple workers, migrate both to Redis (`LIMITER_STORAGE_URI`) before bumping the worker count.
 
 > **Note:** The service uses the full venv path for `ExecStart` — systemd does not source `activate`. Ubuntu's system-managed Python requires a venv; the venv only needs to be created once on the VM.
 
@@ -352,6 +354,14 @@ Set a threshold (e.g. $20/month) — GCP will email you before you're surprised.
 - [x] **Root Cause Analysis (RCA):** Completed detailed analysis of the April 2026 deployment outages.
 
 ## Version History
+
+### [v2.1.2] - 2026-04-18
+
+#### Web App — Bug Fixes
+- **"Generation failed" false negative** (`app.py`, systemd service): root cause was `--workers 2` in the gunicorn service file. `_bg_update_state` is in-process memory — with two workers, admin POST hits worker A but `bg_status` polls hit worker B (which has no state), producing a spurious failure message even when the image generated successfully. Fixed by enforcing `--workers 1`. Documented the constraint in the README with a note on the Redis migration path for future scaling.
+- **Concurrent startup/admin background race** (`app.py`): the startup stale-background check called `update_background()` directly without setting `_bg_update_state["running"]`, so a manual admin trigger arriving during boot would race with the startup update over the same `.tmp` file. Fixed: startup update now routes through `_bg_update_state` so the admin endpoint correctly sees it as already running and blocks the duplicate.
+- **`num_workers` DataLoader crash** (`train.py`): reverted `num_workers` from 4 to 0. On Windows, `spawn`-based DataLoader workers re-import the `train` module, re-executing module-level CUDA initialisation (model allocation, checkpoint load, replay buffer load) in each worker — causing OOM/conflicts and silent crashes with no iteration output in the log.
+- **Iteration log line lost on crash** (`train.py`): added `flush=True` to the `end=""` per-iteration print so the line is written to `train_recovery.log` immediately, even if the process crashes before the loss figures are appended.
 
 ### [v2.1.1] - 2026-04-18
 
