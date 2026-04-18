@@ -788,23 +788,55 @@ def admin_dashboard(token):
                            admin_token=token)
 
 
+_bg_update_state = {"running": False, "last_result": None}  # guarded by GIL (single worker)
+
 @app.route("/api/admin/refresh_background", methods=["POST"])
 @limiter.limit("2 per minute")
 def refresh_background():
-    """Manually triggers a background update using Gemini + Vertex AI Imagen.
-    Expects JSON body: { "token": "<ADMIN_TOKEN>" }
+    """Start a background image update in a daemon thread and return immediately.
     Token is sent in the request body (not the URL) to keep it out of server logs."""
     expected_token = os.environ.get("ADMIN_TOKEN")
     data = request.get_json(silent=True) or {}
-    auth_token = data.get("token", "")
-    if not expected_token or auth_token != expected_token:
+    if not expected_token or data.get("token", "") != expected_token:
         return jsonify({"error": "Unauthorized"}), 401
 
-    success = background_manager.update_background()
-    if success:
-        return jsonify({"status": "Success", "message": "Background updated"}), 200
-    else:
-        return jsonify({"status": "Error", "message": "Failed to update background"}), 505
+    if _bg_update_state["running"]:
+        return jsonify({"status": "running"}), 202
+
+    mtime_before = None
+    try:
+        mtime_before = background_manager.BG_PATH.stat().st_mtime
+    except Exception:
+        pass
+
+    def _do_update():
+        _bg_update_state["running"] = True
+        _bg_update_state["last_result"] = None
+        ok = background_manager.update_background()
+        _bg_update_state["last_result"] = "ok" if ok else "error"
+        _bg_update_state["running"] = False
+
+    threading.Thread(target=_do_update, daemon=True).start()
+    return jsonify({"status": "started", "mtime_before": mtime_before}), 202
+
+
+@app.route("/api/admin/bg_status")
+@limiter.limit("30 per minute")
+def bg_status():
+    """Poll endpoint: returns current bg mtime and whether an update is running."""
+    expected_token = os.environ.get("ADMIN_TOKEN")
+    if request.args.get("token", "") != expected_token:
+        return jsonify({"error": "Unauthorized"}), 401
+    mtime = None
+    try:
+        mtime = background_manager.BG_PATH.stat().st_mtime
+    except Exception:
+        pass
+    return jsonify({
+        "running":     _bg_update_state["running"],
+        "last_result": _bg_update_state["last_result"],
+        "mtime":       mtime,
+    })
 
 # FIX 9: security response headers
 @app.after_request

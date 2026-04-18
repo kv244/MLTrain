@@ -126,7 +126,7 @@
 <p class="subtitle">Live data from BigQuery · auto-fetched on each page load</p>
 
 <p style="margin-top:1rem;">
-    <button onclick="refreshBackground()" style="padding:8px 18px; background:#0ff3; border:1px solid #0ff8;
+    <button id="btn-regen-bg" onclick="refreshBackground()" style="padding:8px 18px; background:#0ff3; border:1px solid #0ff8;
         color:#0ff; border-radius:6px; cursor:pointer; font-size:13px;">
         ↻ Regenerate Background Image
     </button>
@@ -135,24 +135,73 @@
 
 <script>
 async function refreshBackground() {
-    const btn = document.querySelector('button[onclick="refreshBackground()"]');
+    const btn = document.getElementById('btn-regen-bg');
     const status = document.getElementById('bg-status');
     btn.disabled = true;
-    status.textContent = 'Generating… (this takes ~30s)';
+    status.style.color = '#aaa';
+    status.textContent = 'Starting…';
+
+    let mtimeBefore = null;
     try {
-        // Token sent in POST body — not in URL — so it stays out of server logs
-        // and browser history.
         const res = await fetch('/api/admin/refresh_background', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ token: '{{ admin_token }}' })
         });
         const data = await res.json();
-        status.textContent = res.ok ? '✓ Background updated!' : '✗ ' + data.message;
+        if (!res.ok && res.status !== 202) {
+            status.style.color = '#f55';
+            status.textContent = '✗ ' + (data.error || data.message || 'Failed');
+            btn.disabled = false;
+            return;
+        }
+        if (data.status === 'running') {
+            status.textContent = 'Already running — polling for completion…';
+        } else {
+            mtimeBefore = data.mtime_before;
+        }
     } catch (e) {
+        status.style.color = '#f55';
         status.textContent = '✗ Request failed.';
+        btn.disabled = false;
+        return;
     }
-    btn.disabled = false;
+
+    // Poll until mtime changes or last_result is set (max 3 min)
+    const deadline = Date.now() + 180_000;
+    let dots = 0;
+    const timer = setInterval(async () => {
+        dots = (dots + 1) % 4;
+        status.style.color = '#aaa';
+        status.textContent = 'Generating' + '.'.repeat(dots + 1) + ' (Gemini → Imagen, ~30–60s)';
+
+        try {
+            const r = await fetch('/api/admin/bg_status?token={{ admin_token }}');
+            const d = await r.json();
+
+            const done = !d.running && d.last_result !== null;
+            const mtimeChanged = d.mtime !== null && d.mtime !== mtimeBefore;
+
+            if (done || mtimeChanged) {
+                clearInterval(timer);
+                btn.disabled = false;
+                if (d.last_result === 'ok' || mtimeChanged) {
+                    status.style.color = '#0f0';
+                    status.textContent = '✓ New background generated!';
+                } else {
+                    status.style.color = '#f55';
+                    status.textContent = '✗ Generation failed — check server logs.';
+                }
+            }
+        } catch (_) { /* network blip — keep polling */ }
+
+        if (Date.now() > deadline) {
+            clearInterval(timer);
+            btn.disabled = false;
+            status.style.color = '#f55';
+            status.textContent = '✗ Timed out — check server logs.';
+        }
+    }, 3000);
 }
 </script>
 
