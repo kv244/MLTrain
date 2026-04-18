@@ -21,7 +21,7 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-VERSION = "2.0.0"
+VERSION = "2.0.1"
 LAST_COMMIT = "2026-04-18 00:00 UTC"
 
 from mcts import Connect4, run_mcts_simulations

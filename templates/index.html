@@ -30,8 +30,8 @@
 
     <!-- Use a modern, premium font from Google Fonts -->
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
-    <link rel="stylesheet" href="{{ url_for('static', filename='win-effects.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}?v={{ version }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='win-effects.css') }}?v={{ version }}">
     <!-- OpenVINO runtime is handled on the backend now, no need for heavy frontend models -->
 </head>
 <body class="cyberpunk-theme">
@@ -183,9 +183,9 @@
     </div>
 
     <!-- Scripts -->
-    <script src="{{ url_for('static', filename='audio-engine.js') }}"></script>
-    <script src="{{ url_for('static', filename='win-effects.js') }}"></script>
-    <script src="{{ url_for('static', filename='script.js') }}"></script>
+    <script src="{{ url_for('static', filename='audio-engine.js') }}?v={{ version }}"></script>
+    <script src="{{ url_for('static', filename='win-effects.js') }}?v={{ version }}"></script>
+    <script src="{{ url_for('static', filename='script.js') }}?v={{ version }}"></script>
 
 </body>
 </html>
