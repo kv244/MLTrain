@@ -4,12 +4,12 @@ gunicorn
 --extra-index-url https://download.pytorch.org/whl/cpu
 numpy
 openvino
+onnxruntime-gpu
 flake8
 networkx
 python-dotenv
 torch
 scipy
-flask
 google-cloud-aiplatform
 google-genai
 google-cloud-bigquery

@@ -941,6 +941,15 @@ async function initWelcomeMessage() {
                     ? ` · ${t(s.wallpaper_renews, { n: d })}`
                     : ` · ${s.wallpaper_soon || 'wallpaper refreshing soon'}`;
             }
+            // Cache-bust the background image using the file's mtime so the
+            // browser fetches a fresh copy whenever a new image is generated.
+            if (info.bg_mtime) {
+                document.body.style.background =
+                    `linear-gradient(rgba(5,5,20,0.6),rgba(5,5,20,0.6)), url('/static/cyberpunk_bg.png?v=${info.bg_mtime}')`;
+                document.body.style.backgroundSize      = 'cover';
+                document.body.style.backgroundPosition  = 'center';
+                document.body.style.backgroundAttachment = 'fixed';
+            }
         } catch (_) {}
     }
 

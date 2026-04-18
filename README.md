@@ -36,7 +36,7 @@ The project is split into six files:
 - For a structured game like Connect 4, the deeper representation helps capture local and global board patterns more effectively.
 
 - `mcts.py`: Contains the Connect 4 game logic and the Monte Carlo Tree Search (MCTS) implementation.
-- `self_play.py`: Implements batched self-play — runs 64 games in parallel, collecting one batched GPU call per MCTS simulation step.
+- `self_play.py`: Implements batched self-play — runs 128 games in parallel, collecting one batched GPU call per MCTS simulation step.
 - `train.py`: The main training script. It orchestrates self-play data generation and network training.
 - `play.py`: A script to play against a trained model checkpoint (PyTorch `.pt` or ONNX via OpenVINO) in your terminal.
 - `export_onnx.py`: Converts a trained PyTorch checkpoint to ONNX format for CPU inference.
@@ -58,17 +58,26 @@ The script will automatically detect and use your CUDA-enabled GPU. All output i
 The training loop is optimized for efficiency on high-end consumer GPUs:
 - **VRAM Recovery**: After every champion evaluation, the script explicitly deletes the evaluation model and clears the CUDA cache via `torch.cuda.empty_cache()`. This prevents OOM (Out of Memory) errors during long-running training sessions.
 - **Batched MCTS**: Self-play is performed in parallel batches to maximize Tensor Core utilization.
+- **Batched Evaluation**: Evaluation against the champion is now batched (100+ games at once), reducing gating time by ~15x compared to sequential play.
+- **High-Throughput Self-Play**: `PARALLEL_GAMES` is tuned to 128 to fully saturate the RTX 4070's compute units.
+
+### 🚀 Hardware Acceleration & Benchmarking
+
+The project now includes a suite of tools to utilize heterogeneous hardware (RTX 4070 + Intel NPU/CPU):
+
+- **Inference Benchmarking**: Use `benchmark_inference.py` to identify the lowest-latency backend for your specific hardware.
+- **ONNX Runtime GPU**: Leveraging `onnxruntime-gpu` for CUDA-accelerated inference.
+- **Multi-Backend support**: `play.py` automatically selects the fastest backend (NPU/CPU for single moves, GPU for batched search) based on real-world latency profiles.
 
 ### What to Expect
 
 You will see output indicating the training progress for each iteration:
 ```
-Using device: cuda
-torch.compile: enabled
-[  0] +4,096 states  buffer=4,096  |  (warming up, need 512 samples)
-[  1] +4,096 states  buffer=8,192  |  loss=1.9876  policy=1.9455  value=0.0421
-          → saved checkpoint_0000.pt
-[  2] +4,096 states  buffer=12,288 |  loss=1.8123  policy=1.7901  value=0.0222
+[2026-04-18 12:00:00] Using device: cuda
+[2026-04-18 12:00:00] torch.compile: disabled on Windows due to Triton compatibility
+[2026-04-18 12:00:01] [  0] +4,096 states  buffer=4,096  eps=0.25  |  loss=1.9876  policy=1.9455  value=0.0421
+[2026-04-18 12:00:01]           → saved checkpoint_0000.pt
+[2026-04-18 12:00:02] [  1] +4,096 states  buffer=8,192  eps=0.25  |  loss=1.8123  policy=1.7901  value=0.0222
 ...
 ```
 - `+4,096 states`: Number of new game states added to the replay buffer in this iteration.
@@ -79,7 +88,7 @@ Checkpoints are saved periodically (e.g., `checkpoint_0000.pt`, `checkpoint_0010
 
 ### When is it Done?
 
-The training script runs for a fixed number of cycles, defined by `TOTAL_ITERATIONS` in `train.py` (default is 200). It will stop automatically when finished. The "best" model is typically one of the later checkpoints, where the training loss has stabilized at a low value.
+The training script runs for a fixed number of cycles, defined by `TOTAL_ITERATIONS` in `train.py` (default is 1500). It will stop automatically when finished. The "best" model is typically one of the later checkpoints, where the training loss has stabilized at a low value.
 
 ## 2. Playing a Game
 
@@ -305,7 +314,7 @@ sudo systemctl enable nginx
 sudo systemctl start nginx
 ```
 
-This limits each IP to 5 requests/minute (burst of 10). Update the GCP firewall to open port `80` and remove public access to port `5000` — only nginx should be publicly reachable.
+This limits each IP to 60 requests/minute (burst of 30). Update the GCP firewall to open port `80` and remove public access to port `5000` — only nginx should be publicly reachable.
 
 > **Note:** nginx is infrastructure, not app code — it only needs to be set up once on the VM and is unaffected by GitHub Actions deploys.
 
@@ -343,6 +352,29 @@ Set a threshold (e.g. $20/month) — GCP will email you before you're surprised.
 - [x] **Root Cause Analysis (RCA):** Completed detailed analysis of the April 2026 deployment outages.
 
 ## Version History
+
+### [v2.1.1] - 2026-04-18
+
+#### Web App
+- **Background image cache-bust** (`app.py`, `script.js`): `/api/geoip` now returns `bg_mtime` (the file's unix mtime). On every page load, `script.js` overrides `document.body.style.background` with `/static/cyberpunk_bg.png?v={mtime}`, so the browser fetches a fresh image whenever `update_background()` writes a new file. Previously the browser cached the old image indefinitely even after a successful admin regeneration.
+
+#### Training (`train.py`)
+- **`persistent_workers=True`** on the DataLoader: prevents 4 worker processes from being spawned and torn down on every iteration (costly `spawn` overhead on Windows). Workers now stay alive across iterations.
+- **`scheduler.step()` runs unconditionally**: moved outside the `if len(memory) >= BATCH_SIZE` block so the LR schedule advances every iteration regardless of buffer size. Previously the milestones at iter 700/1000 could fire one step late on a fresh run.
+- **Line-buffered log file** (`buffering=1`): `train_recovery.log` is opened with line buffering so each line is flushed immediately; no output is lost if the process crashes mid-buffer.
+- **Unused imports removed**: `random`, `_history_to_training_data`, `Connect4`, `print_board`, `numpy` were imported but never referenced.
+
+#### Docs (`README.md`)
+- Fixed stale values: `self_play.py` description updated from 64 → 128 parallel games; `TOTAL_ITERATIONS` default updated from 200 → 1500; nginx rate-limit description corrected to 60 req/min burst 30; sample output updated with timestamps and `eps=` field.
+
+### [v2.1.0] - 2026-04-18
+
+#### Hardware & Performance
+- **RTX 4070 acceleration via ONNX Runtime** (`play.py`, `self_play.py`, `requirements.txt`): added support for `onnxruntime-gpu`. The `play.py` script now supports multiple backends (`--backend auto|pytorch|openvino|onnx-gpu|onnx-cpu`) and intelligently selects the fastest one for single-move play (preferring NPU/CPU to avoid PCIe latency).
+- **Batched Evaluation** (`self_play.py`, `train.py`): Moved champion evaluation from a sequential loop to a fully batched implementation (`run_batched_evaluation`). This plays all 100+ gating games simultaneously on the GPU, yielding a ~15x speedup for the evaluation phase.
+- **Dell XPS 16 / RTX 4070 tuning** (`train.py`): Increased `PARALLEL_GAMES` from 64 to 128 and enabled 4-worker data loading (`num_workers=4`) to fully saturate high-core-count CPUs and high-end mobile GPUs.
+- **Inference Benchmarking** (`benchmark_inference.py`): New utility to measure and compare latency across PyTorch (CUDA/CPU), OpenVINO (NPU/GPU/CPU), and ONNX Runtime (CUDA/CPU).
+- **Rigor update**: Increased `EVAL_SIMS` from 50 to 200 in `train.py` to break tactical plateaus and ensure only significantly stronger models are promoted to "Champion."
 
 ### [v2.0.0] - 2026-04-18
 

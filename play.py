@@ -9,6 +9,7 @@ import argparse
 import torch
 import numpy as np
 import openvino as ov
+import onnxruntime as ort
 
 from model import AlphaNet
 from mcts import Connect4, run_mcts_simulations, print_board
@@ -44,7 +45,23 @@ class OpenVINOModel:
                torch.from_numpy(result[self.value_output])
 
     def eval(self):
-        # This method is required to mimic the PyTorch model interface, but does nothing for OpenVINO.
+        # This method is required to mimic the PyTorch model interface
+        pass
+
+
+class ONNXRuntimeModel:
+    """A wrapper to make an ONNX Runtime model behave like a PyTorch model for inference."""
+    def __init__(self, model_path: str, provider: str = "CPUExecutionProvider"):
+        self.session = ort.InferenceSession(model_path, providers=[provider])
+        self.input_name = self.session.get_inputs()[0].name
+        self.ov_device = "RTX 4070 (ORT)" if provider == "CUDAExecutionProvider" else "CPU (ORT)"
+
+    def __call__(self, x: torch.Tensor):
+        x_np = x.cpu().numpy()
+        result = self.session.run(None, {self.input_name: x_np})
+        return torch.from_numpy(result[0]), torch.from_numpy(result[1])
+
+    def eval(self):
         pass
 
 def get_human_move(game: Connect4) -> int:
@@ -64,32 +81,51 @@ def get_human_move(game: Connect4) -> int:
 
 def main():
     parser = argparse.ArgumentParser(description="Play Connect 4 against a trained AlphaZero model.")
-    parser.add_argument("--model", type=str, required=True, help="Path to the model file (.pt for PyTorch, .onnx for OpenVINO).")
+    parser.add_argument("--model", type=str, required=True, help="Path to the model file (.pt for PyTorch, .onnx for ONNX/OpenVINO).")
     parser.add_argument("--simulations", type=int, default=800, help="Number of MCTS simulations per AI move.")
     parser.add_argument("--human-first", action="store_true", help="Set this flag for the human to play first as 'X'.")
+    parser.add_argument("--backend", type=str, default="auto", choices=["auto", "pytorch", "openvino", "onnx-gpu", "onnx-cpu"], 
+                        help="Inference backend to use (default: auto).")
     args = parser.parse_args()
 
-    use_openvino = args.model.endswith(".onnx")
+    # Determine backend and device
+    backend = args.backend
+    if backend == "auto":
+        if args.model.endswith(".onnx"):
+            # RATIONALE: For single-move inference (batch size 1), discrete GPUs (RTX 4070)
+            # are slower than CPUs/NPUs due to PCIe latency. We prefer the NPU or ONNX-CPU
+            # for the smoothest UI experience.
+            core = ov.Core()
+            if "NPU" in core.available_devices:
+                backend = "openvino"
+            else:
+                backend = "onnx-cpu"
+        else:
+            backend = "pytorch"
 
-    if use_openvino:
-        # We instantiate the OpenVINOModel which will auto-detect NPU/GPU/CPU
+    print(f"Initializing backend: {backend}")
+
+    if backend == "openvino":
         model = OpenVINOModel(args.model)
         print(f"Using OpenVINO for inference on {model.ov_device}.")
-        # The MCTS logic still uses torch tensors on the CPU side before they are passed to the model.
         device = torch.device("cpu")
-    else:
+    elif backend == "onnx-gpu":
+        model = ONNXRuntimeModel(args.model, provider="CUDAExecutionProvider")
+        print(f"Using ONNX Runtime for inference on {model.ov_device}.")
+        device = torch.device("cpu")
+    elif backend == "onnx-cpu":
+        model = ONNXRuntimeModel(args.model, provider="CPUExecutionProvider")
+        print(f"Using ONNX Runtime for inference on {model.ov_device}.")
+        device = torch.device("cpu")
+    else: # pytorch
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         print(f"Using PyTorch on device: {device}")
         model = AlphaNet().to(device)
         try:
             checkpoint = torch.load(args.model, map_location=device, weights_only=True)
             model.load_state_dict(checkpoint['model_state_dict'])
-        except FileNotFoundError:
-            print(f"Error: Model file not found at '{args.model}'")
-            return
-        except KeyError:
-            # Fallback for raw state_dict checkpoints
-            print("Warning: Checkpoint is not in the expected format. Trying to load raw state_dict.")
+        except (FileNotFoundError, KeyError):
+            # Fallback for raw state_dict
             model.load_state_dict(torch.load(args.model, map_location=device, weights_only=True))
 
     model.eval()

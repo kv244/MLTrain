@@ -709,9 +709,11 @@ def geoip():
         mtime = background_manager.BG_PATH.stat().st_mtime
         age_days = (time.time() - mtime) / 86400
         days_left = max(0, int(7 - age_days))  # floor: whole days remaining
+        bg_mtime = int(mtime)
     except Exception:
         days_left = None
-    return jsonify({"wallpaper_days_left": days_left})
+        bg_mtime = None
+    return jsonify({"wallpaper_days_left": days_left, "bg_mtime": bg_mtime})
 
 # NEW: Dynamic Environment Background Refresh
 @app.route("/admin/<token>")
