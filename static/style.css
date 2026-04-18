@@ -1015,6 +1015,48 @@ For now, two prominent corners are very Manga-style. */
     color: #666;
 }
 
+/* SEO footer — structured content for crawlers, cyberpunk-tinted */
+.seo-footer {
+    width: 100%;
+    max-width: 900px;
+    margin: 2.5rem auto 1.5rem;
+    padding: 2rem;
+    background: rgba(10, 10, 25, 0.35);
+    border: 1px solid rgba(0, 229, 255, 0.07);
+    border-radius: 16px;
+    backdrop-filter: blur(6px);
+}
+.seo-footer-inner {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+    gap: 2rem;
+}
+.seo-col { }
+.seo-footer h2 {
+    font-size: 0.9rem;
+    font-weight: 700;
+    color: rgba(0, 229, 255, 0.6);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    margin-bottom: 0.75rem;
+    border-bottom: 1px solid rgba(0, 229, 255, 0.1);
+    padding-bottom: 0.4rem;
+}
+.seo-footer h3 {
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: #8b949e;
+    margin: 0.9rem 0 0.3rem;
+}
+.seo-footer p {
+    font-size: 0.8rem;
+    color: #4b5563;
+    line-height: 1.7;
+    margin-bottom: 0.5rem;
+}
+.seo-footer p:last-child { margin-bottom: 0; }
+.seo-footer strong { color: #6b7280; }
+
 /* --- Mobile Responsiveness (MAX-WIDTH: 600PX) --- */
 @media (max-width: 600px) {
     body {

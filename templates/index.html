@@ -3,21 +3,23 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Connect 4 AlphaZero — Play Against an AI</title>
+    <title>Connect 4 AI — Play Connect Four Online Free (No Login) | AlphaZero</title>
 
     <!-- SEO -->
-    <meta name="description"        content="Play Connect 4 against an AlphaZero-trained neural network. Free, no login required. Can you beat the AI?" />
-    <meta name="keywords"           content="connect 4, connect four, AI game, AlphaZero, neural network, board game, free game, online game" />
+    <meta name="description"        content="Play Connect 4 online free against an AlphaZero-trained AI. No login, instant play on any device. Powered by Monte Carlo Tree Search and deep reinforcement learning." />
+    <meta name="keywords"           content="connect 4, connect four, AI game, AlphaZero, neural network, board game, free game, online game, MCTS, reinforcement learning" />
     <meta name="author"             content="c4star.com" />
     <meta name="robots"             content="index, follow" />
+    <meta name="theme-color"        content="#1a1a2e" />
     <link rel="canonical"           href="https://c4star.com/" />
+    <link rel="manifest"            href="/static/manifest.json" />
 
     <!-- Open Graph / Facebook share preview -->
     <meta property="fb:app_id" content="1437803187528311" />
     <meta property="og:type"        content="website" />
     <meta property="og:url"         content="https://c4star.com/" />
     <meta property="og:title"       content="Connect 4 AlphaZero — Can you beat the AI?" />
-    <meta property="og:description" content="Play Connect 4 against an AlphaZero-trained neural network. Free, no login required." />
+    <meta property="og:description" content="Play Connect 4 online free against an AlphaZero-trained AI. No login, instant play on any device." />
     <meta property="og:image"       content="https://c4star.com/static/og-preview.png" />
     <meta property="og:image:width"  content="1200" />
     <meta property="og:image:height" content="630" />
@@ -25,14 +27,38 @@
     <!-- Twitter/X card -->
     <meta name="twitter:card"        content="summary_large_image" />
     <meta name="twitter:title"       content="Connect 4 AlphaZero — Can you beat the AI?" />
-    <meta name="twitter:description" content="Play Connect 4 against an AlphaZero-trained neural network. Free, no login required." />
+    <meta name="twitter:description" content="Play Connect 4 online free against an AlphaZero-trained AI. No login, instant play on any device." />
     <meta name="twitter:image"       content="https://c4star.com/static/og-preview.png" />
 
-    <!-- Use a modern, premium font from Google Fonts -->
+    <!-- JSON-LD structured data -->
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "WebApplication",
+      "name": "Connect 4 AlphaZero AI",
+      "url": "https://c4star.com/",
+      "description": "Play Connect 4 online free against an AlphaZero-trained neural network. No login required. Instant play on any device.",
+      "applicationCategory": "GameApplication",
+      "applicationSubCategory": "Board Game",
+      "operatingSystem": "Any",
+      "browserRequirements": "Requires JavaScript",
+      "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" },
+      "genre": "Board Game",
+      "keywords": "connect 4, connect four, AI, AlphaZero, neural network, MCTS, free game, online",
+      "inLanguage": "en",
+      "image": "https://c4star.com/static/og-preview.png",
+      "screenshot": "https://c4star.com/static/og-preview.png",
+      "featureList": "AlphaZero AI, Monte Carlo Tree Search, adjustable difficulty, move hints, undo",
+      "author": { "@type": "Organization", "name": "c4star.com", "url": "https://c4star.com/" }
+    }
+    </script>
+
+    <!-- Preconnect to speed up Google Fonts (Core Web Vitals) -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}?v={{ version }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='win-effects.css') }}?v={{ version }}">
-    <!-- OpenVINO runtime is handled on the backend now, no need for heavy frontend models -->
 </head>
 <body class="cyberpunk-theme">
     <!-- Welcome Toast -->
@@ -48,10 +74,10 @@
     <div id="shockwave"></div>
     <div class="background-container" id="bgContainer"></div>
     <div class="app-container">
-        
+
         <!-- Header Section -->
         <header class="game-header">
-            <h1>Connect 4 AI</h1>
+            <h1>Connect 4 AI — Play AlphaZero Online Free</h1>
             <p class="subtitle">Powered by MCTS & AlphaZero</p>
             {% if version %}
             <div class="version-badge">v{{ version }}</div>
@@ -66,14 +92,14 @@
                     <span class="icon">♪</span> Soundtrack: OFF
                 </button>
             </div>
-            
+
             <div class="control-group">
                 <label for="modelSelect">Engine Version</label>
                 <select id="modelSelect" class="styled-select">
                     <option value="">Loading models...</option>
                 </select>
             </div>
-            
+
             <div class="control-group">
                 <label for="difficultySelect">AI Difficulty</label>
                 <select id="difficultySelect" class="styled-select">
@@ -101,7 +127,7 @@
                 <button id="btnHint" class="btn outline-btn" disabled>Get Hint</button>
                 <button id="btnUndo" class="btn outline-btn" disabled>Undo Move</button>
              </div>
-             
+
              <!-- Stats Panel -->
              <div class="stats-panel">
                 <h3 class="stats-title">Session Stats</h3>
@@ -138,7 +164,7 @@
             <div class="connect4-board" id="c4Board">
                 <!-- Columns and spots will be injected by JavaScript -->
             </div>
-            
+
             <!-- Step 3: Probability Heatmap Layer -->
             <div id="heatmapLayer" class="heatmap-layer hidden">
                 <div class="heatmap-bar" id="bar-0"></div>
@@ -149,7 +175,7 @@
                 <div class="heatmap-bar" id="bar-5"></div>
                 <div class="heatmap-bar" id="bar-6"></div>
             </div>
-            
+
             <button id="btnReset" class="btn secondary-btn btn-small mt-loose hidden">Restart Game</button>
             <div id="kofi-container" style="display:none; text-align:center; margin-top:14px; gap:10px; flex-wrap:wrap; justify-content:center;">
                 <a href="https://ko-fi.com/c4star" target="_blank" rel="noopener"
@@ -166,6 +192,61 @@
         </main>
 
     </div>
+
+    <!-- SEO Footer — structured content for crawlers, styled to match cyberpunk theme -->
+    <footer class="seo-footer" aria-label="About Connect 4 AlphaZero">
+        <div class="seo-footer-inner">
+            <div class="seo-col">
+                <h2>What is AlphaZero?</h2>
+                <p>
+                    AlphaZero is a reinforcement learning algorithm developed by Google DeepMind that
+                    masters board games purely through self-play — no human game data required.
+                    Starting from random play, the neural network iteratively improves by competing
+                    against itself, discovering strategies from scratch. It famously defeated the
+                    world's strongest Chess, Shogi, and Go engines within hours of training.
+                </p>
+                <p>
+                    This site applies the same approach to <strong>Connect 4</strong>: a neural
+                    network trained entirely through self-play, evaluated and promoted only when it
+                    provably beats its predecessor in a statistically significant match.
+                </p>
+            </div>
+            <div class="seo-col">
+                <h2>Connect 4 Winning Strategies</h2>
+                <h3>Control the Centre</h3>
+                <p>
+                    The centre column (column 4) connects to the most winning lines. Opening there
+                    gives you the highest flexibility for horizontal, vertical, and diagonal threats.
+                </p>
+                <h3>Build Forks</h3>
+                <p>
+                    A fork is two simultaneous threats your opponent cannot both block. Force forks
+                    by building overlapping diagonal and horizontal setups — the AI excels at this.
+                </p>
+                <h3>Watch the Odd/Even Rule</h3>
+                <p>
+                    In Connect 4, who wins a forced endgame depends on whether threats land on odd
+                    or even rows. Advanced play exploits this to guarantee a win even when material
+                    is equal.
+                </p>
+            </div>
+            <div class="seo-col">
+                <h2>How the MCTS Engine Works</h2>
+                <p>
+                    Monte Carlo Tree Search (MCTS) explores the game tree by balancing
+                    <em>exploitation</em> (following known good moves) and <em>exploration</em>
+                    (trying new lines). Each simulation expands one leaf node, evaluates it with
+                    the neural network, and backpropagates the result to update move priorities.
+                </p>
+                <p>
+                    The <strong>Think Intensity</strong> slider controls how many simulations run
+                    per move. At 2000 simulations the engine sees dozens of moves ahead and plays
+                    near-perfectly. At 100 simulations it plays quickly but makes occasional
+                    tactical errors — great for beginners.
+                </p>
+            </div>
+        </div>
+    </footer>
 
     <!-- Win Save Modal -->
     <div id="winSaveModal" class="win-modal hidden" role="dialog" aria-modal="true" aria-labelledby="winModalTitle">
