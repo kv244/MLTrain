@@ -841,6 +841,14 @@ def bg_status():
 # FIX 9: security response headers
 @app.after_request
 def set_security_headers(response):
+    # Admin page uses inline <style>/<script> and is already gated by a secret
+    # token — skip CSP so those blocks are not silently blocked by the browser.
+    if request.path.startswith("/admin/"):
+        response.headers['X-Content-Type-Options'] = 'nosniff'
+        response.headers['X-Frame-Options'] = 'DENY'
+        response.headers['Referrer-Policy'] = 'strict-origin-when-cross-origin'
+        return response
+
     # connect-src: allow direct browser fetch to geolocation-db.com so the
     # client's real IP is used (server-side proxy always resolves to server IP).
     response.headers['Content-Security-Policy'] = (
