@@ -96,9 +96,9 @@ device = torch.device("cpu") # PyTorch tensor device for CPU memory handling
 
 def get_ov_device():
     available = _ov_core.available_devices
-    if "NPU" in available: return "npu"
-    if "GPU" in available: return "gpu"
-    return "cpu"
+    if "NPU" in available: return "NPU"
+    if "GPU" in available: return "GPU"
+    return "CPU"
 
 GLOBAL_OV_DEVICE = get_ov_device()
 
