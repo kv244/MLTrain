@@ -204,7 +204,7 @@ if __name__ == "__main__":
         memory.extend(game_data)
 
         # end="" so the loss figures are appended on the same line when training runs.
-        print(f"[{get_timestamp()}] [{iteration:3d}] +{len(game_data):,} states  buffer={len(memory):,} eps={epsilon:.2f}", end="")
+        print(f"[{get_timestamp()}] [{iteration:3d}] +{len(game_data):,} states  buffer={len(memory):,} eps={epsilon:.2f}", end="", flush=True)
 
         # ── Phase 2: Training ─────────────────────────────────────────────────
         if len(memory) >= BATCH_SIZE:
@@ -216,8 +216,7 @@ if __name__ == "__main__":
                 dataset,
                 batch_size=BATCH_SIZE,
                 shuffle=True,
-                num_workers=4,          # Uses multiple XPS 16 CPU cores to avoid stalling the GPU.
-                persistent_workers=True, # Keeps workers alive between steps; avoids spawn overhead per iteration on Windows.
+                num_workers=0,  # Windows spawn would re-execute module-level CUDA init in each worker → OOM.
             )
             
             data_iter = iter(dataloader)
