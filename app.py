@@ -144,7 +144,7 @@ def get_model(checkpoint_path):
 
 @app.route("/")
 def index():
-    return render_template("index.html", version=VERSION)
+    return render_template("index.html", version=VERSION, kofi_tagline=_kofi_tagline)
 
 @app.route("/api/info")
 def get_info():
@@ -829,6 +829,36 @@ _initial_models = sorted(glob.glob("*.onnx"), reverse=True)
 if _initial_models:
     print(f"Pre-loading model: {_initial_models[0]}")
     get_model(_initial_models[0])
+
+# Generate a fresh coffee-button tagline on each restart via Gemini.
+_KOFI_DEFAULT = "☕ enjoyed the game? buy me a coffee"
+_kofi_tagline  = _KOFI_DEFAULT
+
+def _gen_kofi_tagline():
+    global _kofi_tagline
+    if not gemini_client:
+        return
+    try:
+        resp = gemini_client.models.generate_content(
+            model="gemini-2.0-flash",
+            contents=(
+                "Write a single short, witty, playful line (max 10 words, no quotes) "
+                "inviting someone to buy the developer a coffee after they beat a "
+                "Connect 4 AI. Include the ☕ emoji. Be creative and vary the phrasing "
+                "each time — never use 'buy me a coffee'."
+            ),
+            config=genai_types.GenerateContentConfig(
+                http_options=genai_types.HttpOptions(timeout=8000)
+            )
+        )
+        line = resp.text.strip().splitlines()[0].strip()
+        if line:
+            _kofi_tagline = line
+            print(f"[App] Kofi tagline: {_kofi_tagline}")
+    except Exception as exc:
+        print(f"[App] Kofi tagline generation failed: {exc}")
+
+threading.Thread(target=_gen_kofi_tagline, daemon=True).start()
 
 # Startup check for stale background image
 if background_manager.is_background_stale():
