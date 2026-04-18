@@ -51,7 +51,7 @@ To begin the training loop, simply run:
 ```bash
 python train.py
 ```
-The script will automatically detect and use your CUDA-enabled GPU.
+The script will automatically detect and use your CUDA-enabled GPU. All output is mirrored to `train_recovery.log` in the working directory (appended on restart, so history is preserved across runs).
 
 ### 🧠 Training & Memory Management
 
@@ -343,6 +343,38 @@ Set a threshold (e.g. $20/month) — GCP will email you before you're surprised.
 - [x] **Root Cause Analysis (RCA):** Completed detailed analysis of the April 2026 deployment outages.
 
 ## Version History
+
+### [v2.0.0] - 2026-04-18
+
+#### Web App — Features
+
+- **Think Intensity slider** (`index.html`, `script.js`, `app.py`): New slider in the control panel lets players choose how many MCTS simulations the AI runs (100–2000, step 100, default 400). Works independently of the Easy/Medium/Hard difficulty setting — difficulty controls move randomness, intensity controls search depth. Slider is locked during a game. Server-side cap raised to 2000 (was 1200) in both `/api/move` and `/api/assess`; adaptive boost ceiling updated to match.
+
+- **Hall of Fame** (`bigquery_tracker.py`, `app.py`, `index.html`, `script.js`, `style.css`): When a player wins, a modal appears after 1.8 s offering to save their result to a hall-of-fame table (`connect4.win_records` in BigQuery). Saved record contains name, difficulty, simulations, moves, IP address, and timestamp. Name is pre-filled from `localStorage` on return visits. The most recent winner is fetched on every page load (`/api/recent_winner`, 60-second cache) and displayed in the welcome toast in gold with a 🏆 prefix.
+
+- **Welcome message localisation** (`app.py`, `script.js`): The welcome toast now renders in the visitor's primary language. A new `/api/welcome_strings?country=France` endpoint asks Gemini Flash to translate a fixed set of UI strings (greeting, subtitle, stat labels, winner line) into the appropriate language. Translations are cached in-memory per country for the lifetime of the process — Gemini is only called once per country. Singapore and unknown/empty countries default to English without touching Gemini. The `initWelcomeMessage` function is restructured as two phases: geo lookup first (Phase 1), then translations + stats + winner + geoip in parallel (Phase 2).
+
+- **Piece style variety** (`style.css`, `script.js`): Six inner-ring styles are now randomly selected at the start of each game by adding a class to `#c4Board`. Styles: `circuit` (current dashed ring, default), `scanner` (radar sweep arc + centre blip), `cross` (crosshair lines in a circle ring), `hex` (spinning semi-transparent hexagon with `filter:drop-shadow` outline), `diamond` (spinning kite shape), `pulse` (sonar-ping ring that expands outward and fades, no rotation — player 1 at 1.7 s, player 2 at 2.0 s). Style changes on every Restart. All breathing/sizzle/drop animations and the `chip-charged` electric-flash override are unaffected.
+
+#### Web App — Bug Fixes
+
+- **Menace sting now fires regardless of soundtrack state** (`script.js`): `playMenace()` was gated on `AudioEngine.isPlaying`, but the soundtrack auto-stops 10 seconds after game start — so the sting effectively never played during real games. Guard removed from both call sites (bad-move assessment score ≤ 2, and AI confidence > 0.65); `setIntensity()` retains its guard since it requires the live drone filter. Consistent with `playSwoosh()` which has never had an `isPlaying` guard.
+
+- **Facebook share button** (`index.html`, `script.js`): `fbShare()` was defined in an inline `<script>` block and called via `onclick=""`. Both are blocked by the `script-src 'self'` CSP header (no `'unsafe-inline'`), so the function was never defined and clicks silently failed. Moved to `script.js` and wired via `addEventListener`. Also removed `onclick` attribute.
+
+- **Wallpaper renewal countdown** (`app.py`, `script.js`): Backend changed `math.ceil` to `int()` (floor) — previously a freshly updated image (age 0.1 days) would incorrectly round up to 7 days. Frontend now suppresses the note entirely when `days_left === 0` (image is stale, renewal already attempted at startup).
+
+- **`win_records` BigQuery table not created** (`bigquery_tracker.py`): `_win_table_ref` was missing from the `global` declaration in `init()`, causing Python to create a local variable instead of updating the module-level one. The module-level `_win_table_ref` stayed `None` for the lifetime of the process, so `_ensure_win_table()` silently failed, `record_win()` generated malformed SQL, and `/api/recent_winner` always returned `{"winner": null}`. Fixed: `_win_table_ref` added to the `global` statement.
+
+#### Training
+
+- **Log file encoding** (`train.py`): `open("train_recovery.log", "a")` raised `UnicodeEncodeError` on Windows (cp1252 default) when log lines contained Unicode characters such as `→`. Fixed by adding `encoding="utf-8"`.
+
+### [v1.9.3] - 2026-04-17
+
+#### Training (`train.py`)
+- **Persistent logging restored**: Training output is now mirrored to `train_recovery.log` via a `_Tee` stdout wrapper instead of relying on shell redirection (`>> train_recovery.log`), which had silently stopped working. Log is opened in append mode so restarts preserve history.
+- **Code comments**: Added targeted inline comments explaining non-obvious implementation choices — `weights_only=True` security rationale, `last_epoch` fast-forward on resume, `set_to_none=True` GPU perf benefit, dataloader wrap-around, and the `end=""` print pattern.
 
 ### [v1.9.2] - 2026-04-13
 

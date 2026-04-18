@@ -29,13 +29,15 @@ import os
 import threading
 from google.cloud import bigquery
 
-PROJECT_ID = os.environ.get("GCP_PROJECT_ID")
-DATASET    = os.environ.get("BQ_DATASET", "connect4")
-TABLE      = os.environ.get("BQ_TABLE",   "player_stats")
+PROJECT_ID      = os.environ.get("GCP_PROJECT_ID")
+DATASET         = os.environ.get("BQ_DATASET", "connect4")
+TABLE           = os.environ.get("BQ_TABLE",   "player_stats")
+WIN_TABLE       = os.environ.get("BQ_WIN_TABLE", "win_records")
 
-_client    = None
-_enabled   = False
-_table_ref = None   # set in init()
+_client         = None
+_enabled        = False
+_table_ref      = None   # set in init()
+_win_table_ref  = None   # set in init()
 
 
 # ── Initialisation ────────────────────────────────────────────────────────────
@@ -43,17 +45,18 @@ _table_ref = None   # set in init()
 def init():
     """Initialise the BigQuery client and ensure the table exists.
     Silent no-op if GCP_PROJECT_ID is not set (local dev)."""
-    global _client, _enabled, _table_ref
+    global _client, _enabled, _table_ref, _win_table_ref
     if not PROJECT_ID:
         print("[BQTracker] GCP_PROJECT_ID not set — tracking disabled.")
         return
     try:
-        _client    = bigquery.Client(project=PROJECT_ID)
-        _table_ref = f"{PROJECT_ID}.{DATASET}.{TABLE}"
-        _enabled   = True
+        _client        = bigquery.Client(project=PROJECT_ID)
+        _table_ref     = f"{PROJECT_ID}.{DATASET}.{TABLE}"
+        _win_table_ref = f"{PROJECT_ID}.{DATASET}.{WIN_TABLE}"
+        _enabled       = True
         print(f"[BQTracker] Enabled → {_table_ref}")
-        # Create the table in a background thread; don't block app startup
         threading.Thread(target=_ensure_table, daemon=True).start()
+        threading.Thread(target=_ensure_win_table, daemon=True).start()
     except Exception as exc:
         print(f"[BQTracker] Init failed: {exc}")
 
@@ -93,6 +96,26 @@ def _ensure_table():
         print(f"[BQTracker] Table ready: {_table_ref}")
     except Exception as exc:
         print(f"[BQTracker] ensure_table failed: {exc}")
+
+
+_CREATE_WIN_DDL = """
+CREATE TABLE IF NOT EXISTS `{table_ref}` (
+    recorded_at  TIMESTAMP NOT NULL,
+    name         STRING    NOT NULL,
+    difficulty   STRING,
+    simulations  INT64,
+    moves        INT64,
+    ip_address   STRING
+)
+OPTIONS (description = 'Connect-4 AlphaZero — player win hall of fame');
+"""
+
+def _ensure_win_table():
+    try:
+        _client.query(_CREATE_WIN_DDL.format(table_ref=_win_table_ref)).result()
+        print(f"[BQTracker] Win table ready: {_win_table_ref}")
+    except Exception as exc:
+        print(f"[BQTracker] ensure_win_table failed: {exc}")
 
 
 # ── SQL templates ─────────────────────────────────────────────────────────────
@@ -168,6 +191,35 @@ def record_session(ip_address, country=None):
     threading.Thread(
         target=_run, args=(_SESSION_MERGE, params), daemon=True
     ).start()
+
+
+def record_win(ip_address, name, difficulty, simulations, moves):
+    """Insert a single win record into the win_records hall-of-fame table."""
+    if not _enabled:
+        return
+    params = [
+        bigquery.ScalarQueryParameter("ip",          "STRING", ip_address or "unknown"),
+        bigquery.ScalarQueryParameter("name",        "STRING", name),
+        bigquery.ScalarQueryParameter("difficulty",  "STRING", difficulty),
+        bigquery.ScalarQueryParameter("simulations", "INT64",  simulations),
+        bigquery.ScalarQueryParameter("moves",       "INT64",  moves),
+    ]
+    sql = """
+INSERT INTO `{table_ref}` (recorded_at, name, difficulty, simulations, moves, ip_address)
+VALUES (CURRENT_TIMESTAMP(), @name, @difficulty, @simulations, @moves, @ip)
+""".format(table_ref=_win_table_ref)
+    threading.Thread(target=_run_raw, args=(sql, params), daemon=True).start()
+
+
+def _run_raw(sql, params):
+    """Execute a raw parameterised query (no .format substitution)."""
+    if not _enabled:
+        return
+    try:
+        cfg = bigquery.QueryJobConfig(query_parameters=params)
+        _client.query(sql, job_config=cfg).result(timeout=15)
+    except Exception as exc:
+        print(f"[BQTracker] Query error: {exc}")
 
 
 def record_game(ip_address, winner, moves, difficulty="hard"):

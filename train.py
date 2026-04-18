@@ -64,6 +64,7 @@ if pretrained_checkpoints:
     print(f"[{get_timestamp()}] Found {len(pretrained_checkpoints)} checkpoints.")
     latest_ckpt = pretrained_checkpoints[-1]
     print(f"[{get_timestamp()}] Resuming from {latest_ckpt}...")
+    # weights_only=True prevents arbitrary pickle execution in untrusted checkpoints.
     ckpt_data = torch.load(latest_ckpt, map_location=device, weights_only=True)
     if 'model_state_dict' in ckpt_data:
         model.load_state_dict(ckpt_data['model_state_dict'])
@@ -84,12 +85,28 @@ import numpy as np
 
 # LR schedule: drop by 10× at iteration 700, again at 1000.
 # Keeps updates aggressive early, then stabilises loss in late training.
+# last_epoch=start_iteration-1 fast-forwards the scheduler state on resume so
+# the LR reflects where we actually are in training, not epoch 0.
 scheduler = torch.optim.lr_scheduler.MultiStepLR(
     optimizer, milestones=[700, 1000], gamma=0.1,
     last_epoch=start_iteration - 1
 )
 
 import sys
+
+# Mirror every print() to train_recovery.log without changing call sites.
+# Append mode so restarts don't clobber earlier runs.
+class _Tee:
+    def __init__(self, *files):
+        self.files = files
+    def write(self, data):
+        for f in self.files: f.write(data)
+    def flush(self):
+        for f in self.files: f.flush()
+
+_log_fh = open("train_recovery.log", "a", encoding="utf-8")
+sys.stdout = _Tee(sys.__stdout__, _log_fh)
+
 # torch.compile gives ~20-30% extra throughput via kernel fusion on PyTorch 2.x.
 # Falls back gracefully on older installs.
 if sys.platform != "win32":
@@ -138,6 +155,7 @@ def train_step(states, target_p, target_v):
     Value loss   — MSE between predicted and actual game outcome.
     """
     model.train()
+    # set_to_none=True skips the memset-to-zero step — marginally faster on GPU.
     optimizer.zero_grad(set_to_none=True)
 
     with torch.amp.autocast(device.type):
@@ -223,6 +241,7 @@ if __name__ == "__main__":
         )
         memory.extend(game_data)
 
+        # end="" so the loss figures are appended on the same line when training runs.
         print(f"[{get_timestamp()}] [{iteration:3d}] +{len(game_data):,} states  buffer={len(memory):,} eps={epsilon:.2f}", end="")
 
         # ── Phase 2: Training ─────────────────────────────────────────────────
@@ -243,6 +262,7 @@ if __name__ == "__main__":
                 try:
                     states, target_p, target_v = next(data_iter)
                 except StopIteration:
+                    # Buffer smaller than TRAIN_STEPS * BATCH_SIZE: wrap around.
                     data_iter = iter(dataloader)
                     states, target_p, target_v = next(data_iter)
                     

@@ -20,8 +20,14 @@ function updateStatsUI() {
     document.getElementById('statAiWins').innerText = stats.ai;
 }
 
-// Difficulty → simulation count mapping
-const DIFF_SIMS = { easy: 100, medium: 400, hard: 800 };
+const CHIP_STYLES = [
+    'chip-style-circuit',
+    'chip-style-scanner',
+    'chip-style-cross',
+    'chip-style-hex',
+    'chip-style-diamond',
+    'chip-style-pulse',
+];
 
 const DIFF_DESC = {
     easy:   'Easy — AI plays mostly random moves. Hints shown automatically. Great for beginners.',
@@ -31,6 +37,11 @@ const DIFF_DESC = {
 
 let _hintAbortController = null;
 let _hintTimerId = null;
+
+function getSimCount() {
+    const v = parseInt(document.getElementById('simsSlider').value);
+    return isNaN(v) ? 400 : v;
+}
 
 // DOM Elements
 const _board = document.getElementById('c4Board');
@@ -68,6 +79,15 @@ document.addEventListener("DOMContentLoaded", () => {
     _difficultySelect.addEventListener('change', updateDiffHint);
     updateDiffHint();
 
+    // Think Intensity slider label
+    const _simsSlider = document.getElementById('simsSlider');
+    const _simsLabel = document.getElementById('simsLabel');
+    if (_simsSlider && _simsLabel) {
+        _simsSlider.addEventListener('input', () => {
+            _simsLabel.innerText = _simsSlider.value;
+        });
+    }
+
     // Step 4: Hint button
     if (_btnHint) {
         _btnHint.addEventListener('click', () => getHint());
@@ -76,6 +96,18 @@ document.addEventListener("DOMContentLoaded", () => {
     // Step 5: Undo button
     if (_btnUndo) {
         _btnUndo.addEventListener('click', () => undoMove());
+    }
+
+    // Facebook share
+    const _fbBtn = document.getElementById('fb-share-btn');
+    if (_fbBtn) {
+        _fbBtn.addEventListener('click', () => {
+            window.open(
+                'https://www.facebook.com/sharer/sharer.php?u=https%3A%2F%2Fc4star.com',
+                'fb-share',
+                'width=600,height=500,resizable=yes,scrollbars=yes'
+            );
+        });
     }
 
     // Start controls
@@ -152,6 +184,11 @@ function startGame(human_role) {
     moveCount = 0;
     
     initBoard();
+
+    // Pick a random inner-ring style for this game
+    _board.classList.remove(...CHIP_STYLES);
+    _board.classList.add(CHIP_STYLES[Math.floor(Math.random() * CHIP_STYLES.length)]);
+
     clearAssessment();
     WinEffects.reset();
     
@@ -159,6 +196,8 @@ function startGame(human_role) {
     _btnReset.classList.add('hidden');
     _board.classList.remove('disabled');
     _difficultySelect.disabled = true;
+    const _simsSliderEl = document.getElementById('simsSlider');
+    if (_simsSliderEl) _simsSliderEl.disabled = true;
     const kofi = document.getElementById('kofi-container');
     if (kofi) kofi.style.display = 'none';
 
@@ -246,8 +285,8 @@ async function handleColumnClick(c) {
     triggerAiMove();
 }
 
-async function fetchAssessment(prevBoard, move, movingPlayer) { 
-    const sims = DIFF_SIMS[_difficultySelect.value] || 800;
+async function fetchAssessment(prevBoard, move, movingPlayer) {
+    const sims = getSimCount();
     if (!sims) return null;
 
     try {
@@ -321,9 +360,9 @@ function showAssessment(data) {
     container.innerHTML = '';
     container.appendChild(badge);
     
-    if (typeof AudioEngine !== 'undefined' && AudioEngine.isPlaying) {
-        AudioEngine.setIntensity(data.score);
-        // Menace sting: position is critical (score 1–2 = very bad for the moving player)
+    if (typeof AudioEngine !== 'undefined') {
+        if (AudioEngine.isPlaying) AudioEngine.setIntensity(data.score);
+        // Menace sting fires as a standalone effect regardless of background music state
         if (data.score <= 2) AudioEngine.playMenace();
     }
 
@@ -476,7 +515,7 @@ async function getHint() {
                 model: _modelSelect.value,
                 board: board,
                 current_player: humanPlayer,
-                simulations: DIFF_SIMS[_difficultySelect.value] || 800,
+                simulations: getSimCount(),
                 difficulty: 'hard'  // hints always use full AI
             })
         });
@@ -539,7 +578,7 @@ function renderBoard() {
 
 async function triggerAiMove() {
     const difficulty = _difficultySelect.value;
-    const sims = DIFF_SIMS[difficulty] || 800;
+    const sims = getSimCount();
 
     _board.classList.add('disabled');
     updateActionButtons();
@@ -589,8 +628,7 @@ async function triggerAiMove() {
         // Step 3: Show heatmap; trigger menace if AI is highly confident
         if (data.probs) {
             showHeatmap(data.probs);
-            if (typeof AudioEngine !== 'undefined' && AudioEngine.isPlaying &&
-                Math.max(...data.probs) > 0.65) {
+            if (typeof AudioEngine !== 'undefined' && Math.max(...data.probs) > 0.65) {
                 AudioEngine.playMenace();
             }
         }
@@ -695,6 +733,8 @@ function endGame(message, winningLine = null) {
     gameOver = true;
     _board.classList.add('disabled');
     _difficultySelect.disabled = false;
+    const _simsSliderEnd = document.getElementById('simsSlider');
+    if (_simsSliderEnd) _simsSliderEnd.disabled = false;
     updateActionButtons();
     
     _badge.innerText = `${message} in ${moveCount} moves`;
@@ -719,7 +759,13 @@ function endGame(message, winningLine = null) {
         });
 
         WinEffects.triggerRandom(winnerId, winningLine);
-        
+
+        if (winnerId === "human") {
+            setTimeout(() => showWinSaveModal(
+                _difficultySelect.value, getSimCount(), moveCount
+            ), 1800);
+        }
+
         // Auto-revert effects after 5 seconds but keep the pieces
         setTimeout(() => {
             WinEffects.reset();
@@ -763,10 +809,81 @@ function endGame(message, winningLine = null) {
     }
 }
 
-// v1.8.0 (2026-04-11): geolocation now done browser-side so the lookup uses
-// the client's real IP (server proxy always resolved to the server's US IP).
-// geolocation-db.com is whitelisted in the CSP connect-src header.
-// sessionStorage guard removed — toast shows on every page load (5 s, auto-dismiss).
+function showWinSaveModal(difficulty, simulations, moves) {
+    const modal   = document.getElementById('winSaveModal');
+    const descEl  = document.getElementById('winModalDesc');
+    const nameEl  = document.getElementById('winNameInput');
+    const saveBtn = document.getElementById('winSaveBtn');
+    const skipBtn = document.getElementById('winSkipBtn');
+    const status  = document.getElementById('winSaveStatus');
+    if (!modal) return;
+
+    const diffLabel = difficulty.charAt(0).toUpperCase() + difficulty.slice(1);
+    descEl.textContent = `You won on level ${diffLabel} / ${simulations} thoughts after ${moves} moves`;
+    status.textContent = '';
+
+    const saved = localStorage.getItem('c4_winner_name') || '';
+    nameEl.value = saved;
+
+    modal.classList.remove('hidden');
+    nameEl.focus();
+
+    const ac = new AbortController();
+    const { signal } = ac;
+
+    function close() {
+        ac.abort();
+        modal.classList.add('hidden');
+    }
+
+    skipBtn.addEventListener('click', close, { signal });
+
+    saveBtn.addEventListener('click', async () => {
+        const name = nameEl.value.trim();
+        if (!name) { nameEl.focus(); return; }
+
+        localStorage.setItem('c4_winner_name', name);
+        saveBtn.disabled = true;
+        status.style.color = 'var(--neon-cyan)';
+        status.textContent = 'Saving…';
+
+        try {
+            const res = await fetch('/api/record_win', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ name, difficulty, simulations, moves })
+            });
+            if (res.ok) {
+                status.style.color = 'var(--neon-lime)';
+                status.textContent = `Saved! "${name}" is on the board.`;
+                setTimeout(close, 2000);
+            } else {
+                status.style.color = 'var(--player-1)';
+                status.textContent = 'Save failed — try again.';
+                saveBtn.disabled = false;
+            }
+        } catch (_) {
+            status.style.color = 'var(--player-1)';
+            status.textContent = 'Network error — save failed.';
+            saveBtn.disabled = false;
+        }
+    }, { signal });
+}
+
+function escapeHtml(str) {
+    return String(str)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+}
+
+// Substitute {key} placeholders in a translated template string.
+function t(template, vars) {
+    return template.replace(/\{(\w+)\}/g, (_, k) => (vars[k] !== undefined ? vars[k] : `{${k}}`));
+}
+
 async function initWelcomeMessage() {
     const toast = document.getElementById('welcomeToast');
     const msgEl = document.getElementById('welcomeMessage');
@@ -774,36 +891,53 @@ async function initWelcomeMessage() {
 
     toast.classList.remove('hidden');
 
-    // Kick off all three requests in parallel
-    const [geoRes, infoRes, statsRes] = await Promise.allSettled([
-        fetch('https://geolocation-db.com/json/'),
-        fetch('/api/geoip'),
-        fetch('/api/stats')
-    ]);
-
+    // Phase 1: resolve country so we can request the right language.
     let country = "the physical realm";
-    if (geoRes.status === 'fulfilled' && geoRes.value.ok) {
-        try {
-            const geo = await geoRes.value.json();
+    try {
+        const geoRes = await fetch('https://geolocation-db.com/json/');
+        if (geoRes.ok) {
+            const geo = await geoRes.json();
             country = geo.country_name || country;
             sessionCountry = geo.country_name || "";
-        } catch (_) {}
-    }
+        }
+    } catch (_) {}
 
-    // Record session visit in BigQuery (INSERT new IP / UPDATE returning)
+    // Record session visit in BigQuery (fire-and-forget)
     fetch('/api/session', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ country: sessionCountry })
     }).catch(() => {});
 
+    // Phase 2: fetch translated strings + dynamic data in parallel.
+    const [stringsRes, infoRes, statsRes, winnerRes] = await Promise.allSettled([
+        fetch(`/api/welcome_strings?country=${encodeURIComponent(country)}`),
+        fetch('/api/geoip'),
+        fetch('/api/stats'),
+        fetch('/api/recent_winner')
+    ]);
+
+    // Translated UI strings (fall back to English on any error)
+    let s = {
+        greeting:         "Thank you for joining me from {country}!",
+        games_globally:   "{n} games played globally",
+        wallpaper_renews: "wallpaper renews in {n} days",
+        last_winner:      "Last winner",
+        thoughts:         "thoughts",
+        moves:            "moves",
+        subtitle:         "Easy/Medium/Hard sets move randomness \u00b7 Think Intensity (100\u20132000 sims) controls search depth \u2014 mix both to tune difficulty",
+    };
+    if (stringsRes.status === 'fulfilled' && stringsRes.value.ok) {
+        try { s = await stringsRes.value.json(); } catch (_) {}
+    }
+
     let wallpaperNote = '';
     if (infoRes.status === 'fulfilled' && infoRes.value.ok) {
         try {
             const info = await infoRes.value.json();
             const d = info.wallpaper_days_left;
-            if (d !== null && d !== undefined) {
-                wallpaperNote = ` · wallpaper renews in ${d} day${d === 1 ? '' : 's'}`;
+            if (d !== null && d !== undefined && d > 0) {
+                wallpaperNote = ` · ${t(s.wallpaper_renews, { n: d })}`;
             }
         } catch (_) {}
     }
@@ -811,18 +945,31 @@ async function initWelcomeMessage() {
     let globalNote = '';
     if (statsRes.status === 'fulfilled' && statsRes.value.ok) {
         try {
-            const s = await statsRes.value.json();
-            if (s.total_games !== null && s.total_games !== undefined) {
-                globalNote = ` · ${s.total_games.toLocaleString()} games played globally`;
+            const stats = await statsRes.value.json();
+            if (stats.total_games !== null && stats.total_games !== undefined) {
+                globalNote = ` · ${t(s.games_globally, { n: stats.total_games.toLocaleString() })}`;
+            }
+        } catch (_) {}
+    }
+
+    let winnerNote = '';
+    if (winnerRes.status === 'fulfilled' && winnerRes.value.ok) {
+        try {
+            const w = await winnerRes.value.json();
+            if (w.winner) {
+                const { name, difficulty, simulations, moves } = w.winner;
+                const diff = difficulty.charAt(0).toUpperCase() + difficulty.slice(1);
+                winnerNote = `<br><span style="font-size:11px;color:#ffe700;">` +
+                    `🏆 ${escapeHtml(s.last_winner)}: ${escapeHtml(name)} — ${escapeHtml(diff)} / ${escapeHtml(String(simulations))} ${escapeHtml(s.thoughts)} / ${escapeHtml(String(moves))} ${escapeHtml(s.moves)}` +
+                    `</span>`;
             }
         } catch (_) {}
     }
 
     msgEl.innerHTML =
-        `Thank you for joining me from ${country}!${globalNote}${wallpaperNote}` +
-        `<br><span style="font-size:11px;opacity:0.75;">` +
-        `Easy: mostly random &nbsp;·&nbsp; Medium: mixed AI &nbsp;·&nbsp; Hard: full strength — likely ends in a draw` +
-        `</span>`;
+        t(s.greeting, { country }) + globalNote + wallpaperNote +
+        winnerNote +
+        `<br><span style="font-size:11px;opacity:0.75;">${s.subtitle}</span>`;
 
     // Auto-dismiss after 5 seconds to match progress bar
     setTimeout(() => {

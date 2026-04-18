@@ -4,6 +4,7 @@ import re
 import time
 import math
 import csv
+import json
 import torch
 import numpy as np
 import pathlib
@@ -20,8 +21,8 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-VERSION = "1.9.2"
-LAST_COMMIT = "2026-04-13 00:00 UTC"
+VERSION = "2.0.0"
+LAST_COMMIT = "2026-04-18 00:00 UTC"
 
 from mcts import Connect4, run_mcts_simulations
 import background_manager
@@ -200,6 +201,34 @@ def log_game_end():
 
     return jsonify({"success": True})
 
+@app.route("/api/record_win", methods=["POST"])
+@limiter.limit("10 per hour")
+def record_win():
+    """Save a player win to the hall-of-fame table.
+    Body: { "name": "<str>", "difficulty": "<str>", "simulations": <int>, "moves": <int> }"""
+    data = request.json
+    if not data:
+        return jsonify({"error": "Missing or invalid JSON"}), 400
+
+    name        = str(data.get("name", "")).strip()[:50]
+    difficulty  = data.get("difficulty", "hard")
+    moves       = data.get("moves", 0)
+    simulations = data.get("simulations", 400)
+
+    if not name:
+        return jsonify({"error": "Name is required"}), 400
+    if difficulty not in ("easy", "medium", "hard"):
+        difficulty = "hard"
+    try:
+        moves       = max(1, int(moves))
+        simulations = max(1, min(int(simulations), 2000))
+    except (TypeError, ValueError):
+        return jsonify({"error": "Invalid moves or simulations"}), 400
+
+    bigquery_tracker.record_win(request.remote_addr, name, difficulty, simulations, moves)
+    return jsonify({"success": True})
+
+
 @app.route("/api/models")
 def list_models():
     """Lists all available model checkpoints in the main directory."""
@@ -227,9 +256,9 @@ def get_move():
     if current_player not in (-1, 1):
         return jsonify({"error": "Invalid current_player"}), 400
 
-    # FIX 3: safe int coercion — hard cap at 1200 to prevent gunicorn worker timeout
+    # safe int coercion — hard cap at 2000 (matches UI slider max)
     try:
-        simulations = max(1, min(int(data.get("simulations", 800)), 1200))
+        simulations = max(1, min(int(data.get("simulations", 800)), 2000))
     except (TypeError, ValueError):
         return jsonify({"error": "Invalid simulations value"}), 400
 
@@ -288,7 +317,7 @@ def get_move():
             root_val = root.q_value
             # If position is contested/complex, boost the budget
             if abs(root_val) < 0.4:
-                simulations = min(1200, int(simulations * 1.5))
+                simulations = min(2000, int(simulations * 1.5))
                 print(f"[Adaptive] Contested position (q={root_val:.2f}). Boosting sims to {simulations}")
             # If position is nearly decided, reduce the budget
             elif abs(root_val) > 0.85:
@@ -372,9 +401,9 @@ def assess_move():
     if current_player not in (-1, 1):
         return jsonify({"error": "Invalid current_player"}), 400
 
-    # FIX 3: safe int coercion — hard cap at 1200 to prevent gunicorn worker timeout
+    # safe int coercion — hard cap at 2000 (matches UI slider max)
     try:
-        simulations = max(1, min(int(data.get("simulations", 800)), 1200))
+        simulations = max(1, min(int(data.get("simulations", 800)), 2000))
     except (TypeError, ValueError):
         return jsonify({"error": "Invalid simulations value"}), 400
 
@@ -552,6 +581,122 @@ def api_stats():
         _stats_cache["expires"] = now + 300  # 5 minutes
     return jsonify(data)
 
+_winner_cache = {"data": None, "expires": 0}
+_winner_cache_lock = threading.Lock()
+
+@app.route("/api/recent_winner")
+@limiter.limit("30 per minute")
+def api_recent_winner():
+    """Return the most recent entry from win_records, cached for 60 seconds."""
+    now = time.time()
+    with _winner_cache_lock:
+        if _winner_cache["data"] and now < _winner_cache["expires"]:
+            return jsonify(_winner_cache["data"])
+
+    if not bigquery_tracker._enabled or not bigquery_tracker._win_table_ref:
+        return jsonify({"winner": None})
+
+    try:
+        ref = bigquery_tracker._win_table_ref
+        rows = list(bigquery_tracker._client.query(f"""
+            SELECT name, difficulty, simulations, moves,
+                   FORMAT_TIMESTAMP('%Y-%m-%d', recorded_at) AS date
+            FROM `{ref}`
+            ORDER BY recorded_at DESC
+            LIMIT 1
+        """).result())
+        if not rows:
+            data = {"winner": None}
+        else:
+            r = rows[0]
+            data = {
+                "winner": {
+                    "name":        r.name,
+                    "difficulty":  r.difficulty,
+                    "simulations": int(r.simulations),
+                    "moves":       int(r.moves),
+                    "date":        r.date,
+                }
+            }
+    except Exception as e:
+        print(f"[api/recent_winner] BQ query failed: {e}")
+        return jsonify({"winner": None})
+
+    with _winner_cache_lock:
+        _winner_cache["data"]    = data
+        _winner_cache["expires"] = now + 60  # 60-second cache
+    return jsonify(data)
+
+
+# Strings shown in the welcome toast — Gemini translates these per country.
+_ENGLISH_STRINGS = {
+    "greeting":         "Thank you for joining me from {country}!",
+    "games_globally":   "{n} games played globally",
+    "wallpaper_renews": "wallpaper renews in {n} days",
+    "last_winner":      "Last winner",
+    "thoughts":         "thoughts",
+    "moves":            "moves",
+    "subtitle":         "Easy/Medium/Hard sets move randomness \u00b7 Think Intensity (100\u20132000 sims) controls search depth \u2014 mix both to tune difficulty",
+}
+
+# Countries where English is the right default — skip Gemini entirely.
+_ENGLISH_COUNTRIES = {
+    "", "singapore", "united states", "united kingdom", "australia",
+    "canada", "new zealand", "ireland", "the physical realm",
+}
+
+_strings_cache      = {}   # country → translated strings dict
+_strings_cache_lock = threading.Lock()
+
+@app.route("/api/welcome_strings")
+@limiter.limit("60 per minute")
+def welcome_strings():
+    """Return welcome-toast UI strings translated into the visitor's language.
+    Translations are cached per country for the lifetime of the process."""
+    country = request.args.get("country", "").strip()
+
+    if country.lower() in _ENGLISH_COUNTRIES:
+        return jsonify(_ENGLISH_STRINGS)
+
+    with _strings_cache_lock:
+        if country in _strings_cache:
+            return jsonify(_strings_cache[country])
+
+    if not gemini_client:
+        return jsonify(_ENGLISH_STRINGS)
+
+    try:
+        prompt = (
+            f"Translate the JSON values below from English into the primary language of {country}. "
+            f"Rules: return ONLY valid JSON with exactly the same keys; "
+            f"do not translate placeholder tokens like {{country}} or {{n}} — keep them verbatim; "
+            f"do not translate numbers or punctuation characters like · or —; "
+            f"if {country} primarily uses English, return the original values unchanged.\n\n"
+            f"{json.dumps(_ENGLISH_STRINGS, ensure_ascii=False)}"
+        )
+        response = gemini_client.models.generate_content(
+            model="gemini-2.0-flash",
+            contents=prompt,
+            config=genai_types.GenerateContentConfig(
+                http_options=genai_types.HttpOptions(timeout=8000)
+            )
+        )
+        text = response.text.strip()
+        # Strip markdown fences that Gemini sometimes adds
+        text = re.sub(r"^```[a-z]*\n?", "", text)
+        text = re.sub(r"\n?```$", "", text.rstrip())
+
+        translated = json.loads(text)
+        if set(translated.keys()) == set(_ENGLISH_STRINGS.keys()):
+            with _strings_cache_lock:
+                _strings_cache[country] = translated
+            return jsonify(translated)
+    except Exception as e:
+        print(f"[welcome_strings] Translation failed for {country!r}: {e}")
+
+    return jsonify(_ENGLISH_STRINGS)
+
+
 @app.route("/api/geoip")
 @limiter.limit("10 per minute")
 def geoip():
@@ -561,7 +706,7 @@ def geoip():
     try:
         mtime = background_manager.BG_PATH.stat().st_mtime
         age_days = (time.time() - mtime) / 86400
-        days_left = max(0, int(math.ceil(7 - age_days)))
+        days_left = max(0, int(7 - age_days))  # floor: whole days remaining
     except Exception:
         days_left = None
     return jsonify({"wallpaper_days_left": days_left})

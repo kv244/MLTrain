@@ -83,6 +83,12 @@
                 <p id="difficultyHint" class="control-hint"></p>
             </div>
 
+            <div class="control-group">
+                <label for="simsSlider">Think Intensity: <span id="simsLabel">400</span> sims</label>
+                <input type="range" id="simsSlider" class="sims-slider" min="100" max="2000" step="100" value="400">
+                <p class="control-hint">100 = fastest &nbsp;·&nbsp; 2000 = strongest (slower)</p>
+            </div>
+
             <!-- Start Game Controls -->
              <div class="action-buttons">
                 <button id="btnPlayerFirst" class="btn primary-btn">You Play First</button>
@@ -150,7 +156,7 @@
                           border-radius:6px; text-decoration:none; font-size:13px; opacity:0.9;">
                     ☕ enjoyed the game? buy me a coffee
                 </a>
-                <button id="fb-share-btn" onclick="fbShare()"
+                <button id="fb-share-btn"
                    style="padding:7px 16px; background:#1877F2; color:#fff; border:none;
                           border-radius:6px; cursor:pointer; font-size:13px; opacity:0.9;">
                     Share on Facebook
@@ -160,19 +166,26 @@
 
     </div>
 
+    <!-- Win Save Modal -->
+    <div id="winSaveModal" class="win-modal hidden" role="dialog" aria-modal="true" aria-labelledby="winModalTitle">
+        <div class="win-modal-box">
+            <div class="win-modal-icon">🏆</div>
+            <h2 id="winModalTitle" class="win-modal-title">You Won!</h2>
+            <p id="winModalDesc" class="win-modal-desc"></p>
+            <p class="win-modal-prompt">Save your achievement to the hall of fame?</p>
+            <input type="text" id="winNameInput" class="win-name-input" maxlength="50" placeholder="Your name">
+            <div class="win-modal-actions">
+                <button id="winSaveBtn" class="btn primary-btn">Save</button>
+                <button id="winSkipBtn" class="btn outline-btn">No thanks</button>
+            </div>
+            <p id="winSaveStatus" class="win-save-status"></p>
+        </div>
+    </div>
+
     <!-- Scripts -->
     <script src="{{ url_for('static', filename='audio-engine.js') }}"></script>
     <script src="{{ url_for('static', filename='win-effects.js') }}"></script>
     <script src="{{ url_for('static', filename='script.js') }}"></script>
 
-    <script>
-        function fbShare() {
-            window.open(
-                'https://www.facebook.com/sharer/sharer.php?u=https%3A%2F%2Fc4star.com',
-                'fb-share',
-                'width=600,height=500,resizable=yes,scrollbars=yes'
-            );
-        }
-    </script>
 </body>
 </html>

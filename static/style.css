@@ -744,6 +744,18 @@ For now, two prominent corners are very Manga-style. */
     margin-top: 0.25rem;
 }
 
+.sims-slider {
+    width: 100%;
+    margin-top: 0.5rem;
+    accent-color: var(--primary-color);
+    cursor: pointer;
+    height: 6px;
+}
+.sims-slider:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+}
+
 .outline-btn {
     background: transparent;
     border: 1px solid var(--primary-color);
@@ -753,6 +765,201 @@ For now, two prominent corners are very Manga-style. */
 .outline-btn:hover:not(:disabled) {
     background: rgba(0, 229, 255, 0.1);
     box-shadow: 0 0 10px var(--primary-color);
+}
+
+/* ── Piece Style Variants ─────────────────────────────────────────────────
+ * A random class is added to #c4Board each game (see script.js pickChipStyle).
+ * Each class scopes ::before overrides that outrank the global .chip-1/2::before.
+ * ::after (glare) and all breathe/sizzle/drop animations are untouched.
+ * Style 1 "circuit" is the current global default — no extra CSS needed.
+ * ─────────────────────────────────────────────────────────────────────────── */
+
+/* ── Style 2: scanner — single radar-sweep arc + centre blip ── */
+.chip-style-scanner .chip-1::before {
+    background: radial-gradient(circle, rgba(255,45,85,0.65) 8%, transparent 9%);
+    border: 2.5px solid transparent;
+    border-top-color:   rgba(255,45,85,0.95);
+    border-right-color: rgba(255,45,85,0.28);
+    border-style: solid;
+    border-radius: 50%;
+    box-shadow: none;
+    animation: chip-ring-cw var(--ring-speed, 3.5s) linear infinite;
+}
+.chip-style-scanner .chip-2::before {
+    background: radial-gradient(circle, rgba(255,231,0,0.65) 8%, transparent 9%);
+    border: 2.5px solid transparent;
+    border-top-color:   rgba(255,231,0,0.95);
+    border-right-color: rgba(255,231,0,0.28);
+    border-style: solid;
+    border-radius: 50%;
+    box-shadow: none;
+    animation: chip-ring-ccw var(--ring-speed, 3.5s) linear infinite;
+}
+
+/* ── Style 3: cross — crosshair lines inscribed in a circle ── */
+.chip-style-cross .chip-1::before {
+    border-radius: 50%;
+    border: 1.5px solid rgba(255,45,85,0.4);
+    border-style: solid;
+    background:
+        linear-gradient(rgba(255,45,85,0.82) 0%, rgba(255,45,85,0.82) 100%) center / 2px 66% no-repeat,
+        linear-gradient(rgba(255,45,85,0.82) 0%, rgba(255,45,85,0.82) 100%) center / 66% 2px no-repeat;
+    box-shadow: none;
+    animation: chip-ring-cw var(--ring-speed, 5s) linear infinite;
+}
+.chip-style-cross .chip-2::before {
+    border-radius: 50%;
+    border: 1.5px solid rgba(255,231,0,0.4);
+    border-style: solid;
+    background:
+        linear-gradient(rgba(255,231,0,0.82) 0%, rgba(255,231,0,0.82) 100%) center / 2px 66% no-repeat,
+        linear-gradient(rgba(255,231,0,0.82) 0%, rgba(255,231,0,0.82) 100%) center / 66% 2px no-repeat;
+    box-shadow: none;
+    animation: chip-ring-ccw var(--ring-speed, 5s) linear infinite;
+}
+
+/* ── Style 4: hex — spinning filled hexagon ──
+ * clip-path clips both fill and border, so we use filter:drop-shadow for glow. */
+.chip-style-hex .chip-1::before {
+    border-radius: 0;
+    border: none;
+    background: rgba(255,45,85,0.38);
+    clip-path: polygon(50% 3%, 97% 27%, 97% 73%, 50% 97%, 3% 73%, 3% 27%);
+    filter: drop-shadow(0 0 3px rgba(255,45,85,0.85));
+    box-shadow: none;
+    animation: chip-ring-cw var(--ring-speed, 4s) linear infinite;
+}
+.chip-style-hex .chip-2::before {
+    border-radius: 0;
+    border: none;
+    background: rgba(255,231,0,0.34);
+    clip-path: polygon(50% 3%, 97% 27%, 97% 73%, 50% 97%, 3% 73%, 3% 27%);
+    filter: drop-shadow(0 0 3px rgba(255,231,0,0.85));
+    box-shadow: none;
+    animation: chip-ring-ccw var(--ring-speed, 4s) linear infinite;
+}
+
+/* ── Style 5: diamond — spinning filled diamond ── */
+.chip-style-diamond .chip-1::before {
+    border-radius: 0;
+    border: none;
+    background: rgba(255,45,85,0.36);
+    clip-path: polygon(50% 3%, 97% 50%, 50% 97%, 3% 50%);
+    filter: drop-shadow(0 0 3px rgba(255,45,85,0.85));
+    box-shadow: none;
+    animation: chip-ring-cw var(--ring-speed, 3.5s) linear infinite;
+}
+.chip-style-diamond .chip-2::before {
+    border-radius: 0;
+    border: none;
+    background: rgba(255,231,0,0.32);
+    clip-path: polygon(50% 3%, 97% 50%, 50% 97%, 3% 50%);
+    filter: drop-shadow(0 0 3px rgba(255,231,0,0.85));
+    box-shadow: none;
+    animation: chip-ring-ccw var(--ring-speed, 3.5s) linear infinite;
+}
+
+/* ── Style 6: pulse — expanding sonar ring, no rotation ── */
+.chip-style-pulse .chip-1::before {
+    border-radius: 50%;
+    border: 2px solid rgba(255,45,85,0.9);
+    border-style: solid;
+    background: rgba(255,45,85,0.07);
+    box-shadow: 0 0 6px rgba(255,45,85,0.4);
+    animation: chip-pulse-p1 1.7s ease-out infinite;
+}
+.chip-style-pulse .chip-2::before {
+    border-radius: 50%;
+    border: 2px solid rgba(255,231,0,0.9);
+    border-style: solid;
+    background: rgba(255,231,0,0.07);
+    box-shadow: 0 0 6px rgba(255,231,0,0.4);
+    animation: chip-pulse-p2 2.0s ease-out infinite;
+}
+@keyframes chip-pulse-p1 {
+    0%   { transform: scale(0.2); opacity: 0.95; }
+    100% { transform: scale(1.1); opacity: 0;    }
+}
+@keyframes chip-pulse-p2 {
+    0%   { transform: scale(0.2); opacity: 0.95; }
+    100% { transform: scale(1.1); opacity: 0;    }
+}
+
+/* ── Win Save Modal ───────────────────────────────────────────────────── */
+.win-modal {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.75);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 2000;
+    backdrop-filter: blur(4px);
+}
+.win-modal.hidden { display: none; }
+
+.win-modal-box {
+    background: rgba(10, 10, 25, 0.97);
+    border: 1px solid var(--neon-cyan);
+    border-radius: 16px;
+    padding: 2rem 2.5rem;
+    max-width: 420px;
+    width: 90%;
+    text-align: center;
+    box-shadow: 0 0 30px var(--neon-cyan);
+    animation: modal-pop 0.25s ease-out;
+}
+@keyframes modal-pop {
+    from { transform: scale(0.85); opacity: 0; }
+    to   { transform: scale(1);    opacity: 1; }
+}
+
+.win-modal-icon { font-size: 2.5rem; margin-bottom: 0.5rem; }
+
+.win-modal-title {
+    color: var(--neon-cyan);
+    font-size: 1.5rem;
+    text-shadow: 0 0 10px var(--neon-cyan);
+    margin-bottom: 0.5rem;
+}
+
+.win-modal-desc {
+    font-size: 0.95rem;
+    color: var(--text-heading);
+    margin-bottom: 0.4rem;
+}
+
+.win-modal-prompt {
+    font-size: 0.85rem;
+    color: #8b949e;
+    margin-bottom: 1rem;
+}
+
+.win-name-input {
+    width: 100%;
+    padding: 0.65rem 0.9rem;
+    border-radius: 8px;
+    background: #0d1117;
+    border: 1px solid var(--neon-cyan);
+    color: var(--text-heading);
+    font-size: 1rem;
+    outline: none;
+    margin-bottom: 1rem;
+    text-align: center;
+}
+.win-name-input:focus { box-shadow: 0 0 8px var(--neon-cyan); }
+
+.win-modal-actions {
+    display: flex;
+    gap: 0.75rem;
+    justify-content: center;
+}
+
+.win-save-status {
+    font-size: 0.8rem;
+    margin-top: 0.75rem;
+    min-height: 1.1em;
+    color: var(--neon-lime);
 }
 
 .outline-btn:disabled {
