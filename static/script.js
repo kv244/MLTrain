@@ -982,9 +982,32 @@ async function initWelcomeMessage() {
         winnerNote +
         `<br><span style="font-size:11px;opacity:0.75;">${s.subtitle}</span>`;
 
+    // Populate help modal with translated strings
+    const helpTitle = document.getElementById('helpModalTitle');
+    const helpRules = document.getElementById('helpRules');
+    const helpClose = document.getElementById('helpCloseBtn');
+    if (helpTitle) helpTitle.textContent = s.help_title || 'How to Play';
+    if (helpRules) helpRules.innerHTML = [
+        s.help_intro, s.help_fall, s.help_win, s.help_draw, s.help_tip
+    ].map(r => `<li>${escapeHtml(r)}</li>`).join('');
+    if (helpClose) helpClose.textContent = s.help_close || 'Got it!';
+
     // Auto-dismiss after 5 seconds to match progress bar
     setTimeout(() => {
         toast.style.animation = 'toast-slide-out 0.5s forwards';
         setTimeout(() => toast.remove(), 500);
     }, 5000);
 }
+
+// ── Help modal ────────────────────────────────────────────────────────────────
+(function () {
+    const modal  = document.getElementById('helpModal');
+    const btn    = document.getElementById('btnHelp');
+    const close  = document.getElementById('helpCloseBtn');
+    if (!modal || !btn) return;
+
+    btn.addEventListener('click', () => modal.classList.remove('hidden'));
+    close.addEventListener('click', () => modal.classList.add('hidden'));
+    modal.addEventListener('click', e => { if (e.target === modal) modal.classList.add('hidden'); });
+    document.addEventListener('keydown', e => { if (e.key === 'Escape') modal.classList.add('hidden'); });
+}());

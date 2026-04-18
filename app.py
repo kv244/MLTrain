@@ -650,6 +650,13 @@ _ENGLISH_STRINGS = {
     "thoughts":         "thoughts",
     "moves":            "moves",
     "subtitle":         "Easy/Medium/Hard sets move randomness \u00b7 Think Intensity (100\u20132000 sims) controls search depth \u2014 mix both to tune difficulty",
+    "help_title":       "How to Play",
+    "help_intro":       "Two players take turns dropping coloured pieces into a 7\u00d76 grid.",
+    "help_fall":        "Pieces fall to the lowest empty slot in the chosen column.",
+    "help_win":         "First to connect 4 in a line \u2014 horizontal, vertical, or diagonal \u2014 wins.",
+    "help_draw":        "If all 42 squares fill up with no winner, the game is a draw.",
+    "help_tip":         "Tip: raise Think Intensity for a stronger (but slower) AI.",
+    "help_close":       "Got it!",
 }
 
 # Countries where English is the right default — skip Gemini entirely.

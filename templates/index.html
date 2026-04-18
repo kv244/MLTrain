@@ -56,6 +56,7 @@
             {% if version %}
             <div class="version-badge">v{{ version }}</div>
             {% endif %}
+            <button id="btnHelp" class="btn-help" aria-label="How to play">?</button>
         </header>
 
         <!-- Sidebar / Top controls -->
@@ -179,6 +180,22 @@
                 <button id="winSkipBtn" class="btn outline-btn">No thanks</button>
             </div>
             <p id="winSaveStatus" class="win-save-status"></p>
+        </div>
+    </div>
+
+    <!-- Help Modal -->
+    <div id="helpModal" class="win-modal hidden" role="dialog" aria-modal="true" aria-labelledby="helpModalTitle">
+        <div class="win-modal-box help-modal-box">
+            <div class="win-modal-icon">🎮</div>
+            <h2 id="helpModalTitle" class="win-modal-title">How to Play</h2>
+            <ul class="help-rules" id="helpRules">
+                <li>Two players take turns dropping coloured pieces into a 7×6 grid.</li>
+                <li>Pieces fall to the lowest empty slot in the chosen column.</li>
+                <li>First to connect 4 in a line — horizontal, vertical, or diagonal — wins.</li>
+                <li>If all 42 squares fill up with no winner, the game is a draw.</li>
+                <li>Tip: raise Think Intensity for a stronger (but slower) AI.</li>
+            </ul>
+            <button id="helpCloseBtn" class="btn primary-btn">Got it!</button>
         </div>
     </div>
 
