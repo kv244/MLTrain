@@ -57,7 +57,7 @@ def update_background():
 
         # 2. Generate Image via Vertex AI Imagen
         vertexai.init(project=PROJECT_ID, location=LOCATION)
-        generation_model = ImageGenerationModel.from_pretrained("imagegeneration@006")
+        generation_model = ImageGenerationModel.from_pretrained("imagen-3.0-generate-001")
         
         print("[BackgroundManager] Requesting image from Vertex AI Imagen...")
         images = generation_model.generate_images(prompt=image_prompt, number_of_images=1)

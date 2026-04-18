@@ -491,7 +491,7 @@ def assess_move():
                 model="gemini-2.0-flash",
                 contents=prompt,
                 config=genai_types.GenerateContentConfig(
-                    http_options=genai_types.HttpOptions(timeout=8000)
+                    http_options=genai_types.HttpOptions(timeout=15000)
                 )
             )
             responseText = response.text
@@ -680,7 +680,7 @@ def welcome_strings():
             model="gemini-2.0-flash",
             contents=prompt,
             config=genai_types.GenerateContentConfig(
-                http_options=genai_types.HttpOptions(timeout=8000)
+                http_options=genai_types.HttpOptions(timeout=15000)
             )
         )
         text = response.text.strip()
@@ -904,7 +904,7 @@ def _gen_kofi_tagline():
                 "each time — never say 'buy me a coffee'."
             ),
             config=genai_types.GenerateContentConfig(
-                http_options=genai_types.HttpOptions(timeout=8000)
+                http_options=genai_types.HttpOptions(timeout=15000)
             )
         )
         line = resp.text.strip().splitlines()[0].strip()
