@@ -38,12 +38,11 @@ CHECKPOINT_EVERY     = 10
 EVAL_GAMES           = 100       # Reduced variance in champion gating
 EVAL_EVERY           = 20
 EVAL_SIMS            = 800       # Increased from 200 to 800; use deeper search to distinguish between very strong models.
-VALUE_LOSS_WEIGHT    = 2.0       # Upweight value head: counteracts collapse where value_loss → 0 while policy dominates.
-EPSILON_FLOOR        = 0.12      # Raised from 0.05: value head needs exploratory games to escape saturation plateau.
+EPSILON_FLOOR        = 0.12      # Raised from 0.05: keeps self-play games diverse in late training.
 
 # Set to a specific checkpoint path to override auto-latest resume (e.g. rollback recovery).
 # Set to None to resume from the most recent checkpoint as normal.
-RESUME_FROM          = "checkpoint_0800.pt"
+RESUME_FROM          = None
 
 # ── Device & model ────────────────────────────────────────────────────────────
 def get_timestamp():
@@ -167,7 +166,7 @@ def train_step(states, target_p, target_v):
         log_probs   = F.log_softmax(policy_logits, dim=1)
         policy_loss = -torch.sum(target_p * log_probs, dim=1).mean()
         value_loss  = F.mse_loss(value.float(), target_v)
-        loss        = policy_loss + VALUE_LOSS_WEIGHT * value_loss
+        loss        = policy_loss + value_loss
 
     scaler.scale(loss).backward()
     scaler.step(optimizer)
