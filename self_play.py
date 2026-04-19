@@ -2,9 +2,10 @@
 self_play.py — The "Gym"
 
 Two modes:
-    run_self_play_game()      — single game, batch size 1 (baseline / debug)
     run_batched_self_play()   — N games in parallel, batch size N per GPU call
                                 This is the RTX 4070 path.
+    run_batched_evaluation()  — play M1 vs M2 across N games simultaneously
+                                for champion gating.
 
 Batching strategy (leaf parallelism):
     Each simulation step, advance *every* active game's MCTS tree through
@@ -81,6 +82,7 @@ def run_batched_self_play(
 
         newly_done = []
         for i in active:
+            # temp_threshold is total plies (both players), matching AlphaZero paper
             temperature = 1.0 if move_counts[i] < temp_threshold else 0.01
             probs = _visits_to_probs(roots[i], temperature)
 
@@ -193,8 +195,11 @@ def run_batched_evaluation(
                 if node.is_terminal():
                     node.backpropagate(node.terminal_value)
                 else:
-                    # Determine which model should evaluate this leaf
-                    if games[i].current_player == m1_colors[i]:
+                    # Determine which model should evaluate this leaf.
+                    # Must use node.game.current_player (leaf state), NOT
+                    # games[i].current_player (root state) — the leaf may be
+                    # several moves ahead with the other player to move.
+                    if node.game.current_player == m1_colors[i]:
                         to_evaluate_m1.append(node)
                     else:
                         to_evaluate_m2.append(node)
