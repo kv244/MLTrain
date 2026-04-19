@@ -47,7 +47,7 @@ _telemetry_table_ref = None  # set in init()
 def init():
     """Initialise the BigQuery client and ensure the table exists.
     Silent no-op if GCP_PROJECT_ID is not set (local dev)."""
-    global _client, _enabled, _table_ref, _win_table_ref
+    global _client, _enabled, _table_ref, _win_table_ref, _telemetry_table_ref
     if not PROJECT_ID:
         print("[BQTracker] GCP_PROJECT_ID not set — tracking disabled.")
         return
