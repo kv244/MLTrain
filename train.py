@@ -37,7 +37,13 @@ TOTAL_ITERATIONS     = 1500
 CHECKPOINT_EVERY     = 10
 EVAL_GAMES           = 100       # Reduced variance in champion gating
 EVAL_EVERY           = 20
-EVAL_SIMS            = 200       # Increased from 50 to break tactical plateaus
+EVAL_SIMS            = 800       # Increased from 200 to 800; use deeper search to distinguish between very strong models.
+VALUE_LOSS_WEIGHT    = 2.0       # Upweight value head: counteracts collapse where value_loss → 0 while policy dominates.
+EPSILON_FLOOR        = 0.12      # Raised from 0.05: value head needs exploratory games to escape saturation plateau.
+
+# Set to a specific checkpoint path to override auto-latest resume (e.g. rollback recovery).
+# Set to None to resume from the most recent checkpoint as normal.
+RESUME_FROM          = "checkpoint_0800.pt"
 
 # ── Device & model ────────────────────────────────────────────────────────────
 def get_timestamp():
@@ -58,13 +64,13 @@ pretrained_checkpoints = sorted(
     key=lambda x: int(os.path.basename(x).split('_')[1].split('.')[0])
 )
 
-# Debug: list found checkpoints to verify sorting
-if pretrained_checkpoints:
-    print(f"[{get_timestamp()}] Found {len(pretrained_checkpoints)} checkpoints.")
-    latest_ckpt = pretrained_checkpoints[-1]
-    print(f"[{get_timestamp()}] Resuming from {latest_ckpt}...")
-    # weights_only=True prevents arbitrary pickle execution in untrusted checkpoints.
-    ckpt_data = torch.load(latest_ckpt, map_location=device, weights_only=True)
+resume_ckpt = RESUME_FROM if (RESUME_FROM and os.path.exists(RESUME_FROM)) else (
+    pretrained_checkpoints[-1] if pretrained_checkpoints else None
+)
+
+if resume_ckpt:
+    print(f"[{get_timestamp()}] Resuming from {resume_ckpt}...")
+    ckpt_data = torch.load(resume_ckpt, map_location=device, weights_only=True)
     if 'model_state_dict' in ckpt_data:
         model.load_state_dict(ckpt_data['model_state_dict'])
     if 'optimizer_state_dict' in ckpt_data:
@@ -161,7 +167,7 @@ def train_step(states, target_p, target_v):
         log_probs   = F.log_softmax(policy_logits, dim=1)
         policy_loss = -torch.sum(target_p * log_probs, dim=1).mean()
         value_loss  = F.mse_loss(value.float(), target_v)
-        loss        = policy_loss + value_loss
+        loss        = policy_loss + VALUE_LOSS_WEIGHT * value_loss
 
     scaler.scale(loss).backward()
     scaler.step(optimizer)
@@ -191,8 +197,8 @@ if __name__ == "__main__":
 
     for iteration in range(start_iteration, TOTAL_ITERATIONS):
         # A) Dirichlet Epsilon Decay
-        # Linear decay from 0.25 to 0.05
-        epsilon = max(0.05, 0.25 * (1.0 - iteration / TOTAL_ITERATIONS))
+        # Linear decay from 0.25 to EPSILON_FLOOR
+        epsilon = max(EPSILON_FLOOR, 0.25 * (1.0 - iteration / TOTAL_ITERATIONS))
 
         # ── Phase 1: Self-Play (64 games, batched GPU calls) ────────────────
         game_data = run_batched_self_play(
