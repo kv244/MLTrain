@@ -363,6 +363,21 @@ Set a threshold (e.g. $20/month) — GCP will email you before you're surprised.
 - **`num_workers` DataLoader crash** (`train.py`): reverted `num_workers` from 4 to 0. On Windows, `spawn`-based DataLoader workers re-import the `train` module, re-executing module-level CUDA initialisation (model allocation, checkpoint load, replay buffer load) in each worker — causing OOM/conflicts and silent crashes with no iteration output in the log.
 - **Iteration log line lost on crash** (`train.py`): added `flush=True` to the `end=""` per-iteration print so the line is written to `train_recovery.log` immediately, even if the process crashes before the loss figures are appended.
 
+### [v2.1.3] - 2026-04-19
+
+#### Bug Fixes — Training & Evaluation
+
+- **Invalid MCTS tree reuse in evaluation** (`self_play.py`): `run_batched_evaluation` was reusing the search tree between moves even though Model 1 and Model 2 alternate. Model 2 was inheriting Model 1's Q-values and visit counts, biasing its search with the opponent's policy priors. Fixed: tree is always reset to `None` after each move in evaluation so each model searches from a clean slate.
+- **Tactical override missing from evaluation** (`self_play.py`): `run_batched_evaluation` did not apply the instant-win / forced-block override that both self-play and production use. A model could be rejected by the champion gate for failing to see a 1-move win that the production environment would have caught automatically. Fixed: evaluation now mirrors production move selection.
+- **Binomial gating rounding** (`train.py`): `round(wins)` uses Python 3 banker's rounding (round-half-to-even), so `round(50.5)` → 50, silently dropping half-wins from draws. Changed to `int(wins + 0.5)` for consistent round-half-up behaviour.
+- **`_telemetry_table_ref` not declared global** (`bigquery_tracker.py`): `init()` assigned `_telemetry_table_ref` as a local variable, leaving the module-level reference as `None`. `record_telemetry()` would crash on the first call. Fixed by adding it to the `global` declaration.
+
+#### Features
+
+- **Move telemetry → BigQuery** (`app.py`, `bigquery_tracker.py`): Per-move inference latency previously appended to an unbounded `telemetry.csv` on the VM filesystem. Replaced with a `move_telemetry` BigQuery table (auto-created on first deploy) — queryable, rotates automatically, no disk growth.
+- **Leaderboard** (web app): Sidebar button opens a modal showing the 5 most recent player wins with name, difficulty, sim count, move count, and date. Backed by a new `/api/leaderboard` endpoint with 60-second BQ cache.
+- **SEO improvements**: JSON-LD `WebApplication` schema, `sitemap.xml`, `robots.txt`, `manifest.json` (PWA), `theme-color`, `preconnect` for Google Fonts, keyword-rich `<title>` and `<h1>`, structured 3-column footer (hidden on mobile).
+
 ### [v2.1.2] - 2026-04-19
 
 #### Training Rigor

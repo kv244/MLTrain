@@ -273,7 +273,7 @@ if __name__ == "__main__":
                 # One-sided test: is the current model significant better than 50/50?
                 # We round wins to integer for binomtest; draws count as 0.5 but binomtest needs counts.
                 # For fairness in binomtest, we treat draws as half-wins.
-                res = binomtest(round(wins), total, p=0.5, alternative='greater')
+                res = binomtest(int(wins + 0.5), total, p=0.5, alternative='greater')
                 win_rate = wins / total
                 print(f"[{get_timestamp()}] Evaluation result: {win_rate*100:.1f}% win rate (p={res.pvalue:.4f})")
                 

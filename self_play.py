@@ -232,6 +232,18 @@ def run_batched_evaluation(
                 visits[move] = child.visit_count
             
             move = int(np.argmax(visits))
+
+            # Tactical override: match production behaviour — take immediate
+            # win or block opponent's immediate win before trusting MCTS.
+            win_move = games[i].get_winning_move(games[i].current_player)
+            if win_move is not None:
+                move = win_move
+            else:
+                opp = -games[i].current_player
+                block_move = games[i].get_winning_move(opp)
+                if block_move is not None:
+                    move = block_move
+
             r, c = games[i].play(move)
             
             if games[i].check_win(r, c):
@@ -244,13 +256,9 @@ def run_batched_evaluation(
                 wins += 0.5 # Draw
                 newly_done.append(i)
             else:
-                # Tree reuse
-                chosen_child = roots[i].children.get(move)
-                if chosen_child:
-                    chosen_child.parent = None
-                    roots[i] = chosen_child
-                else:
-                    roots[i] = None
+                # Always reset tree between moves in evaluation: each model must
+                # search from scratch so Model 2 cannot inherit Model 1's Q-values.
+                roots[i] = None
         
         active = [i for i in active if i not in newly_done]
 
