@@ -346,15 +346,7 @@ def get_move():
     )
     inference_time = time.time() - start_time
     
-    # Write telemetry to CSV
-    telemetry_file = os.environ.get("TELEMETRY_LOG_PATH", "telemetry.csv")
-    with _csv_lock:
-        file_exists = os.path.isfile(telemetry_file)  # checked inside lock to avoid TOCTOU
-        with open(telemetry_file, mode='a', newline='') as csv_file:
-            writer = csv.writer(csv_file)
-            if not file_exists:
-                writer.writerow(["timestamp", "model", "simulations", "inference_time_seconds"])
-            writer.writerow([time.strftime("%Y-%m-%dT%H:%M:%S"), checkpoint_name, simulations, f"{inference_time:.4f}"])
+    bigquery_tracker.record_telemetry(checkpoint_name, simulations, inference_time)
     
     best_move = int(np.argmax(mcts_probs))
     

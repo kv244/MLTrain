@@ -29,15 +29,17 @@ import os
 import threading
 from google.cloud import bigquery
 
-PROJECT_ID      = os.environ.get("GCP_PROJECT_ID")
-DATASET         = os.environ.get("BQ_DATASET", "connect4")
-TABLE           = os.environ.get("BQ_TABLE",   "player_stats")
-WIN_TABLE       = os.environ.get("BQ_WIN_TABLE", "win_records")
+PROJECT_ID          = os.environ.get("GCP_PROJECT_ID")
+DATASET             = os.environ.get("BQ_DATASET",        "connect4")
+TABLE               = os.environ.get("BQ_TABLE",          "player_stats")
+WIN_TABLE           = os.environ.get("BQ_WIN_TABLE",      "win_records")
+TELEMETRY_TABLE     = os.environ.get("BQ_TELEMETRY_TABLE","move_telemetry")
 
-_client         = None
-_enabled        = False
-_table_ref      = None   # set in init()
-_win_table_ref  = None   # set in init()
+_client             = None
+_enabled            = False
+_table_ref          = None   # set in init()
+_win_table_ref      = None   # set in init()
+_telemetry_table_ref = None  # set in init()
 
 
 # ── Initialisation ────────────────────────────────────────────────────────────
@@ -50,13 +52,15 @@ def init():
         print("[BQTracker] GCP_PROJECT_ID not set — tracking disabled.")
         return
     try:
-        _client        = bigquery.Client(project=PROJECT_ID)
-        _table_ref     = f"{PROJECT_ID}.{DATASET}.{TABLE}"
-        _win_table_ref = f"{PROJECT_ID}.{DATASET}.{WIN_TABLE}"
-        _enabled       = True
+        _client               = bigquery.Client(project=PROJECT_ID)
+        _table_ref            = f"{PROJECT_ID}.{DATASET}.{TABLE}"
+        _win_table_ref        = f"{PROJECT_ID}.{DATASET}.{WIN_TABLE}"
+        _telemetry_table_ref  = f"{PROJECT_ID}.{DATASET}.{TELEMETRY_TABLE}"
+        _enabled              = True
         print(f"[BQTracker] Enabled → {_table_ref}")
-        threading.Thread(target=_ensure_table, daemon=True).start()
-        threading.Thread(target=_ensure_win_table, daemon=True).start()
+        threading.Thread(target=_ensure_table,           daemon=True).start()
+        threading.Thread(target=_ensure_win_table,       daemon=True).start()
+        threading.Thread(target=_ensure_telemetry_table, daemon=True).start()
     except Exception as exc:
         print(f"[BQTracker] Init failed: {exc}")
 
@@ -116,6 +120,24 @@ def _ensure_win_table():
         print(f"[BQTracker] Win table ready: {_win_table_ref}")
     except Exception as exc:
         print(f"[BQTracker] ensure_win_table failed: {exc}")
+
+
+_CREATE_TELEMETRY_DDL = """
+CREATE TABLE IF NOT EXISTS `{table_ref}` (
+    recorded_at          TIMESTAMP NOT NULL,
+    model                STRING,
+    simulations          INT64,
+    inference_time_ms    FLOAT64
+)
+OPTIONS (description = 'Connect-4 AlphaZero — per-move inference latency');
+"""
+
+def _ensure_telemetry_table():
+    try:
+        _client.query(_CREATE_TELEMETRY_DDL.format(table_ref=_telemetry_table_ref)).result()
+        print(f"[BQTracker] Telemetry table ready: {_telemetry_table_ref}")
+    except Exception as exc:
+        print(f"[BQTracker] ensure_telemetry_table failed: {exc}")
 
 
 # ── SQL templates ─────────────────────────────────────────────────────────────
@@ -220,6 +242,22 @@ def _run_raw(sql, params):
         _client.query(sql, job_config=cfg).result(timeout=15)
     except Exception as exc:
         print(f"[BQTracker] Query error: {exc}")
+
+
+def record_telemetry(model, simulations, inference_time_seconds):
+    """Insert one row of inference latency into move_telemetry. Fire-and-forget."""
+    if not _enabled:
+        return
+    sql = """
+INSERT INTO `{table_ref}` (recorded_at, model, simulations, inference_time_ms)
+VALUES (CURRENT_TIMESTAMP(), @model, @simulations, @inference_time_ms)
+""".format(table_ref=_telemetry_table_ref)
+    params = [
+        bigquery.ScalarQueryParameter("model",             "STRING",  model),
+        bigquery.ScalarQueryParameter("simulations",       "INT64",   simulations),
+        bigquery.ScalarQueryParameter("inference_time_ms", "FLOAT64", round(inference_time_seconds * 1000, 3)),
+    ]
+    threading.Thread(target=_run_raw, args=(sql, params), daemon=True).start()
 
 
 def record_game(ip_address, winner, moves, difficulty="hard"):
