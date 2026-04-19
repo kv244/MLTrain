@@ -363,6 +363,11 @@ Set a threshold (e.g. $20/month) — GCP will email you before you're surprised.
 - **`num_workers` DataLoader crash** (`train.py`): reverted `num_workers` from 4 to 0. On Windows, `spawn`-based DataLoader workers re-import the `train` module, re-executing module-level CUDA initialisation (model allocation, checkpoint load, replay buffer load) in each worker — causing OOM/conflicts and silent crashes with no iteration output in the log.
 - **Iteration log line lost on crash** (`train.py`): added `flush=True` to the `end=""` per-iteration print so the line is written to `train_recovery.log` immediately, even if the process crashes before the loss figures are appended.
 
+### [v2.1.2] - 2026-04-19
+
+#### Training Rigor
+- **Evaluation depth increased** (`train.py`): Bumped `EVAL_SIMS` from 200 to 800. This deeper search is designed to break the "Connect 4 stalemate" where high-strength models draw frequently at lower simulation depths. The batched GPU inference makes 800-sim gating feasible in under 8 minutes.
+
 ### [v2.1.1] - 2026-04-18
 
 #### Web App

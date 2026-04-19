@@ -105,6 +105,13 @@ body::after {
     color: #8b949e;
 }
 
+.version-badge {
+    font-size: 0.7rem;
+    color: #4b5563;
+    margin-top: 0.25rem;
+    font-family: monospace;
+}
+
 /* Control Panel */
 .control-panel {
     display: flex;
@@ -1086,7 +1093,6 @@ For now, two prominent corners are very Manga-style. */
     grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
     gap: 2rem;
 }
-.seo-col { }
 .seo-footer h2 {
     font-size: 0.9rem;
     font-weight: 700;
@@ -1111,6 +1117,11 @@ For now, two prominent corners are very Manga-style. */
 }
 .seo-footer p:last-child { margin-bottom: 0; }
 .seo-footer strong { color: #6b7280; }
+
+/* Hide SEO footer on touch/mobile devices — game UI takes priority */
+@media (max-width: 900px) {
+    .seo-footer { display: none; }
+}
 
 /* --- Mobile Responsiveness (MAX-WIDTH: 600PX) --- */
 @media (max-width: 600px) {
@@ -1271,17 +1282,6 @@ For now, two prominent corners are very Manga-style. */
     /* Removed CSS animation to prevent conflict with Web Animations API */
 }
 
-@keyframes stardust-fade {
-    0% {
-        transform: translate(0, 0) scale(1);
-        opacity: 0.8;
-    }
-
-    100% {
-        transform: translate(var(--dx), var(--dy)) scale(0);
-        opacity: 0;
-    }
-}
 
 /* Welcome Toast */
 .welcome-toast {

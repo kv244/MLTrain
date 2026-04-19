@@ -19,60 +19,8 @@ Batching strategy (leaf parallelism):
 import numpy as np
 import torch
 import torch.nn.functional as F
-import random
 
 from mcts import Connect4, MCTSNode, board_to_tensor, _add_dirichlet_noise
-
-
-# ── Single-game self-play (kept for reference / debugging) ───────────────────
-
-def run_self_play_game(
-    model: torch.nn.Module,
-    device: torch.device,
-    num_sims: int = 400,
-    c_puct: float = 1.0,
-    temp_threshold: int = 12,
-    epsilon: float = 0.25,
-) -> list:
-    """
-    Simulates a full Connect 4 game from start to finish
-    applying the search parameters provided.
-    """
-    from mcts import run_mcts_simulations
-    game = Connect4()
-    states = []
-    
-    # ── Game Loop ─────────────────────────────────────────────────────────────
-    while True:
-        # Determine current search temperature:
-        # - High (1.0) during opening (up to temp_threshold) for diversity
-        # - Low (0.01) thereafter for tactical precision
-        temp = 1.0 if game.move_count < temp_threshold else 0.01
-        
-        # Run MCTS simulations for current position
-        probs = run_mcts_simulations(
-            game,
-            model,
-            device,
-            num_sims=num_sims,
-            temperature=temp,
-            add_dirichlet_noise=True,
-            epsilon=epsilon
-        )
-        
-        # Save state: (normalized_board, mcts_probs, current_player)
-        states.append((board_to_tensor(game), probs, game.current_player))
-        
-        # Sample move from the MCTS probability distribution
-        move = np.random.choice(7, p=probs)
-        r, c = game.play(move)
-        
-        if game.check_win(r, c):
-            winner = -game.current_player; break
-        if not game.get_valid_moves():
-            winner = 0; break
-
-    return _history_to_training_data(states, winner)
 
 
 # ── Batched self-play ─────────────────────────────────────────────────────────
