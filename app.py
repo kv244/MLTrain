@@ -971,16 +971,18 @@ def _gen_kofi_tagline():
         resp = gemini_client.models.generate_content(
             model="gemini-2.0-flash",
             contents=(
-                "Write a single short, witty, playful line (max 10 words, no quotes) "
-                "inviting someone to buy the developer a coffee after they beat a "
-                "Connect 4 AI. Include the ☕ emoji. Be creative and vary the phrasing "
-                "each time — never say 'buy me a coffee'."
+                "Output ONLY a single short witty line (max 10 words, no quotes, no preamble) "
+                "inviting someone to buy the developer a coffee after beating a Connect 4 AI. "
+                "Must include the ☕ emoji. Never say 'buy me a coffee'. "
+                "Example output: You crushed it! Fuel the dev ☕"
             ),
             config=genai_types.GenerateContentConfig(
                 http_options=genai_types.HttpOptions(timeout=15000)
             )
         )
-        line = resp.text.strip().splitlines()[0].strip()
+        # Find the first line that contains ☕ to skip any preamble Gemini adds
+        lines = [l.strip() for l in resp.text.splitlines() if '☕' in l and l.strip()]
+        line = lines[0] if lines else resp.text.strip().splitlines()[0].strip()
         if line:
             _kofi_tagline = line
             print(f"[App] Kofi tagline: {_kofi_tagline}")
