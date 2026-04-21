@@ -147,10 +147,16 @@ def run_batched_evaluation(
     games = [Connect4() for _ in range(num_games)]
     # Match colors: model1 is P1 for even games, P2 for odd games to ensure fairness
     m1_colors = [1 if i % 2 == 0 else -1 for i in range(num_games)]
-    
+
     active = list(range(num_games))
     roots = {i: None for i in range(num_games)}
+    move_counts = {i: 0 for i in range(num_games)}
     wins = 0.0
+
+    # Small opening temperature to diversify games and avoid deterministic
+    # replays. After EVAL_TEMP_THRESHOLD plies both models play fully greedy.
+    EVAL_TEMP = 0.5
+    EVAL_TEMP_THRESHOLD = 4  # first 4 plies only
 
     while active:
         # 1. Expand roots if needed
@@ -231,12 +237,9 @@ def run_batched_evaluation(
         # 3. Make Moves
         newly_done = []
         for i in active:
-            # For evaluation, always use temperature 0 (greedy)
-            visits = np.zeros(7, dtype=np.int32)
-            for move, child in roots[i].children.items():
-                visits[move] = child.visit_count
-            
-            move = int(np.argmax(visits))
+            temp = EVAL_TEMP if move_counts[i] < EVAL_TEMP_THRESHOLD else 0.0
+            probs = _visits_to_probs(roots[i], temp)
+            move = int(np.random.choice(7, p=probs))
 
             # Tactical override: match production behaviour — take immediate
             # win or block opponent's immediate win before trusting MCTS.
@@ -250,9 +253,10 @@ def run_batched_evaluation(
                     move = block_move
 
             r, c = games[i].play(move)
-            
+            move_counts[i] += 1
+
             if games[i].check_win(r, c):
-                # Last player moved and won. 
+                # Last player moved and won.
                 # If last player was m1_colors[i], Model 1 wins.
                 if -games[i].current_player == m1_colors[i]:
                     wins += 1.0
