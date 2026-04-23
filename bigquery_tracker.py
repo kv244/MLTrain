@@ -25,21 +25,24 @@ All BQ operations are fire-and-forget (daemon threads); HTTP responses are never
 blocked waiting for BigQuery.
 """
 
+import json
 import os
 import threading
 from google.cloud import bigquery
 
-PROJECT_ID          = os.environ.get("GCP_PROJECT_ID")
-DATASET             = os.environ.get("BQ_DATASET",        "connect4")
-TABLE               = os.environ.get("BQ_TABLE",          "player_stats")
-WIN_TABLE           = os.environ.get("BQ_WIN_TABLE",      "win_records")
-TELEMETRY_TABLE     = os.environ.get("BQ_TELEMETRY_TABLE","move_telemetry")
+PROJECT_ID           = os.environ.get("GCP_PROJECT_ID")
+DATASET              = os.environ.get("BQ_DATASET",             "connect4")
+TABLE                = os.environ.get("BQ_TABLE",               "player_stats")
+WIN_TABLE            = os.environ.get("BQ_WIN_TABLE",           "win_records")
+TELEMETRY_TABLE      = os.environ.get("BQ_TELEMETRY_TABLE",     "move_telemetry")
+HUMAN_GAMES_TABLE    = os.environ.get("BQ_HUMAN_GAMES_TABLE",   "human_games")
 
-_client             = None
-_enabled            = False
-_table_ref          = None   # set in init()
-_win_table_ref      = None   # set in init()
-_telemetry_table_ref = None  # set in init()
+_client              = None
+_enabled             = False
+_table_ref           = None   # set in init()
+_win_table_ref       = None   # set in init()
+_telemetry_table_ref = None   # set in init()
+_human_games_table_ref = None # set in init()
 
 
 # ── Initialisation ────────────────────────────────────────────────────────────
@@ -47,20 +50,22 @@ _telemetry_table_ref = None  # set in init()
 def init():
     """Initialise the BigQuery client and ensure the table exists.
     Silent no-op if GCP_PROJECT_ID is not set (local dev)."""
-    global _client, _enabled, _table_ref, _win_table_ref, _telemetry_table_ref
+    global _client, _enabled, _table_ref, _win_table_ref, _telemetry_table_ref, _human_games_table_ref
     if not PROJECT_ID:
         print("[BQTracker] GCP_PROJECT_ID not set — tracking disabled.")
         return
     try:
-        _client               = bigquery.Client(project=PROJECT_ID)
-        _table_ref            = f"{PROJECT_ID}.{DATASET}.{TABLE}"
-        _win_table_ref        = f"{PROJECT_ID}.{DATASET}.{WIN_TABLE}"
-        _telemetry_table_ref  = f"{PROJECT_ID}.{DATASET}.{TELEMETRY_TABLE}"
-        _enabled              = True
+        _client                = bigquery.Client(project=PROJECT_ID)
+        _table_ref             = f"{PROJECT_ID}.{DATASET}.{TABLE}"
+        _win_table_ref         = f"{PROJECT_ID}.{DATASET}.{WIN_TABLE}"
+        _telemetry_table_ref   = f"{PROJECT_ID}.{DATASET}.{TELEMETRY_TABLE}"
+        _human_games_table_ref = f"{PROJECT_ID}.{DATASET}.{HUMAN_GAMES_TABLE}"
+        _enabled               = True
         print(f"[BQTracker] Enabled → {_table_ref}")
-        threading.Thread(target=_ensure_table,           daemon=True).start()
-        threading.Thread(target=_ensure_win_table,       daemon=True).start()
-        threading.Thread(target=_ensure_telemetry_table, daemon=True).start()
+        threading.Thread(target=_ensure_table,              daemon=True).start()
+        threading.Thread(target=_ensure_win_table,          daemon=True).start()
+        threading.Thread(target=_ensure_telemetry_table,    daemon=True).start()
+        threading.Thread(target=_ensure_human_games_table,  daemon=True).start()
     except Exception as exc:
         print(f"[BQTracker] Init failed: {exc}")
 
@@ -138,6 +143,27 @@ def _ensure_telemetry_table():
         print(f"[BQTracker] Telemetry table ready: {_telemetry_table_ref}")
     except Exception as exc:
         print(f"[BQTracker] ensure_telemetry_table failed: {exc}")
+
+
+_CREATE_HUMAN_GAMES_DDL = """
+CREATE TABLE IF NOT EXISTS `{table_ref}` (
+    recorded_at    TIMESTAMP NOT NULL,
+    winner         STRING    NOT NULL,
+    move_sequence  STRING,
+    num_moves      INT64,
+    difficulty     STRING,
+    ip_address     STRING,
+    human_player   INT64
+)
+OPTIONS (description = 'Connect-4 AlphaZero — human win game trajectories for retraining');
+"""
+
+def _ensure_human_games_table():
+    try:
+        _client.query(_CREATE_HUMAN_GAMES_DDL.format(table_ref=_human_games_table_ref)).result()
+        print(f"[BQTracker] Human games table ready: {_human_games_table_ref}")
+    except Exception as exc:
+        print(f"[BQTracker] ensure_human_games_table failed: {exc}")
 
 
 # ── SQL templates ─────────────────────────────────────────────────────────────
@@ -258,6 +284,60 @@ VALUES (CURRENT_TIMESTAMP(), @model, @simulations, @inference_time_ms)
         bigquery.ScalarQueryParameter("inference_time_ms", "FLOAT64", round(inference_time_seconds * 1000, 3)),
     ]
     threading.Thread(target=_run_raw, args=(sql, params), daemon=True).start()
+
+
+def record_human_game(ip_address, winner, move_sequence, difficulty="hard", human_player=1):
+    """Store the full move trajectory of a game the human won (or drew).
+    move_sequence: list of column ints in play order (alternating players).
+    Enables offline retraining and opening-book construction."""
+    if not _enabled or not _human_games_table_ref:
+        return
+    seq_json = json.dumps([int(m) for m in move_sequence]) if move_sequence else "[]"
+    sql = """
+INSERT INTO `{table_ref}` (recorded_at, winner, move_sequence, num_moves, difficulty, ip_address, human_player)
+VALUES (CURRENT_TIMESTAMP(), @winner, @move_sequence, @num_moves, @difficulty, @ip, @human_player)
+""".format(table_ref=_human_games_table_ref)
+    params = [
+        bigquery.ScalarQueryParameter("winner",        "STRING", winner),
+        bigquery.ScalarQueryParameter("move_sequence", "STRING", seq_json),
+        bigquery.ScalarQueryParameter("num_moves",     "INT64",  len(move_sequence) if move_sequence else 0),
+        bigquery.ScalarQueryParameter("difficulty",    "STRING", difficulty or "hard"),
+        bigquery.ScalarQueryParameter("ip",            "STRING", ip_address or "unknown"),
+        bigquery.ScalarQueryParameter("human_player",  "INT64",  int(human_player)),
+    ]
+    threading.Thread(target=_run_raw, args=(sql, params), daemon=True).start()
+
+
+def get_human_games(winner_filter="human", limit=1000):
+    """Return game records as a list of dicts for training or book-building.
+    Each dict: {move_sequence: [int, ...], winner: str, human_player: int}
+    Blocking call — intended for offline training scripts, not request handlers."""
+    if not _enabled or not _human_games_table_ref:
+        return []
+    try:
+        where = "WHERE move_sequence IS NOT NULL AND num_moves > 6"
+        if winner_filter:
+            if winner_filter not in ("human", "ai", "draw"):
+                raise ValueError(f"Invalid winner_filter: {winner_filter!r}")
+            where += f" AND winner = '{winner_filter}'"
+        rows = list(_client.query(f"""
+            SELECT move_sequence, winner, human_player
+            FROM `{_human_games_table_ref}`
+            {where}
+            ORDER BY recorded_at DESC
+            LIMIT {int(limit)}
+        """).result(timeout=30))
+        return [
+            {
+                "move_sequence": json.loads(r.move_sequence),
+                "winner":        r.winner,
+                "human_player":  int(r.human_player) if r.human_player is not None else 1,
+            }
+            for r in rows if r.move_sequence
+        ]
+    except Exception as exc:
+        print(f"[BQTracker] get_human_games failed: {exc}")
+        return []
 
 
 def record_game(ip_address, winner, moves, difficulty="hard"):

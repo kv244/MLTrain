@@ -38,3 +38,5 @@ eval_models.py
 # PNG files except the OG share preview
 *.png
 !static/og-preview.png
+desktop.ini
+*.ini

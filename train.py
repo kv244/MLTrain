@@ -19,11 +19,16 @@ import glob
 import datetime
 from collections import deque
 
+import numpy as np
 import torch
 import torch.nn.functional as F
+from dotenv import load_dotenv
+
+load_dotenv()
 
 from model import AlphaNet
 from self_play import run_batched_self_play, run_batched_evaluation
+import bigquery_tracker
 
 # ── Hyper-parameters ──────────────────────────────────────────────────────────
 PARALLEL_GAMES       = 128       # Optimized for RTX 4070 throughput; increased from 64 to better saturate Tensor Cores.
@@ -132,7 +137,68 @@ if os.path.exists(BUFFER_PATH):
     except Exception as e:
         print(f"[{get_timestamp()}] Warning: Could not load replay buffer: {e}")
 
+# Seed the buffer with human-win games from BigQuery so the model trains on
+# positions it lost from — positions self-play never generates.
+bigquery_tracker.init()
+if bigquery_tracker._enabled:
+    try:
+        print(f"[{get_timestamp()}] Loading human games from BigQuery...")
+        _hg_raw  = bigquery_tracker.get_human_games(limit=2000)
+        _hg_data = _human_games_to_training_data(_hg_raw)
+        if _hg_data:
+            memory.extend(_hg_data)
+            print(f"[{get_timestamp()}] Added {len(_hg_data):,} states from {len(_hg_raw)} human games")
+        del _hg_raw, _hg_data
+    except Exception as _e:
+        print(f"[{get_timestamp()}] Warning: Could not load human games: {_e}")
+
 # ── Utilities ─────────────────────────────────────────────────────────────────
+
+def _human_games_to_training_data(games_data: list) -> list:
+    """Convert human-win game records from BigQuery to (state, policy, value) tuples.
+
+    Uses a one-hot policy (the actual move played) as a weak supervised signal.
+    These samples are lower quality than MCTS-derived data but cover positions
+    the model lost from, which self-play never generates.
+    """
+    from mcts import Connect4, board_to_tensor
+    all_data = []
+    for g in games_data:
+        moves      = g["move_sequence"]
+        winner_str = g["winner"]
+        human_pl   = g["human_player"]
+        game       = Connect4()
+        history    = []
+
+        for col in moves:
+            if not isinstance(col, int) or col < 0 or col > 6:
+                break
+            # For AI-turn positions in a human-win game the AI played a losing move.
+            # One-hot policy would train the model to reproduce that mistake, so use
+            # uniform policy and let the value head (-1.0) carry the corrective signal.
+            if game.current_player != human_pl and winner_str == "human":
+                probs = np.ones(7, dtype=np.float32) / 7
+            else:
+                probs = np.zeros(7, dtype=np.float32)
+                probs[col] = 1.0
+            history.append((board_to_tensor(game), probs, game.current_player))
+            result = game.play(col)
+            if result is None:
+                break
+            r, c = result
+            if game.check_win(r, c):
+                break
+
+        winner = 0 if winner_str == "draw" else (human_pl if winner_str == "human" else -human_pl)
+        for state_t, mcts_p, player in history:
+            value = 0.0 if winner == 0 else (1.0 if player == winner else -1.0)
+            all_data.append((
+                state_t,
+                torch.from_numpy(mcts_p).float(),
+                torch.tensor([value], dtype=torch.float32),
+            ))
+    return all_data
+
 
 class ReplayBufferDataset(torch.utils.data.Dataset):
     def __init__(self, memory):

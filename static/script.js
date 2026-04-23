@@ -7,6 +7,7 @@ let currentPlayer = 1; // 1 = Human, -1 = AI (default if AI plays first)
 let humanPlayer = 1;
 let gameOver = false;
 let moveCount = 0; // Track total moves
+let moveSequence = []; // Ordered list of column plays for trajectory logging
 
 // Session metadata (populated by initWelcomeMessage after geo-IP resolves)
 let sessionCountry = "";
@@ -182,6 +183,7 @@ function startGame(human_role) {
     currentPlayer = 1; // 1 always goes first in Connect4
     gameOver = false;
     moveCount = 0;
+    moveSequence = [];
     
     initBoard();
 
@@ -412,6 +414,7 @@ function playMove(r, c, player) {
 
     board[r][c] = player;
     moveCount++;
+    moveSequence.push(c);
 
     document.querySelectorAll('.latest-piece').forEach(el => el.classList.remove('latest-piece'));
 
@@ -556,6 +559,7 @@ function undoMove() {
     
     board = previousState;
     moveCount = Math.max(0, moveCount - 2); // Undo both player and AI move
+    moveSequence.splice(moveCount); // Keep in sync with moveCount
     renderBoard();
     clearAssessment();
     hideHeatmap();
@@ -788,11 +792,13 @@ function endGame(message, winningLine = null) {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
             body: JSON.stringify({
-                winner:     winnerId,
-                model:      _modelSelect.value || "unknown",
-                moves:      moveCount,
-                country:    sessionCountry,
-                difficulty: _difficultySelect.value
+                winner:        winnerId,
+                model:         _modelSelect.value || "unknown",
+                moves:         moveCount,
+                country:       sessionCountry,
+                difficulty:    _difficultySelect.value,
+                move_sequence: moveSequence,
+                human_player:  humanPlayer
             })
         }).catch(e => console.error("Telemetry log failed:", e));
 
@@ -977,10 +983,15 @@ async function initWelcomeMessage() {
         } catch (_) {}
     }
 
+    const newsBanner = s.news_banner
+        ? `<br><span style="font-size:11px;color:var(--neon-lime);">✨ ${escapeHtml(s.news_banner)}</span>`
+        : '';
+
     msgEl.innerHTML =
         t(s.greeting, { country }) + globalNote + wallpaperNote +
         winnerNote +
-        `<br><span style="font-size:11px;opacity:0.75;">${s.subtitle}</span>`;
+        `<br><span style="font-size:11px;opacity:0.75;">${s.subtitle}</span>` +
+        newsBanner;
 
     // Populate help modal with translated strings
     const helpTitle = document.getElementById('helpModalTitle');

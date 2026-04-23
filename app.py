@@ -1,8 +1,10 @@
 import os
 import glob
+import hashlib
 import re
 import time
 import csv
+import datetime
 import json
 import torch
 import numpy as np
@@ -71,6 +73,21 @@ def ratelimit_handler(e):
 MODELS_DIR = pathlib.Path(".").resolve()
 _csv_lock = threading.Lock()
 _model_lock = threading.Lock()
+
+# Opening book: {board_hash: {"avoid_move": col, "count": N}}
+# Built offline by build_opening_book.py from human-win game trajectories.
+_opening_book: dict = {}
+_BOOK_PATH = MODELS_DIR / "opening_book.json"
+if _BOOK_PATH.exists():
+    try:
+        with open(_BOOK_PATH) as _f:
+            _opening_book = json.load(_f)
+        print(f"[App] Opening book loaded: {len(_opening_book)} positions")
+    except Exception as _e:
+        print(f"[App] Opening book load failed: {_e}")
+
+def _book_hash(board_arr: np.ndarray) -> str:
+    return hashlib.sha256(board_arr.astype(np.int8).tobytes()).hexdigest()[:16]
 
 # Single shared OpenVINO Core instance — creating ov.Core() is heavyweight
 # (scans hardware, loads plugins).  Re-using one instance avoids redundant
@@ -199,6 +216,16 @@ def log_game_end():
 
     # BigQuery — fire-and-forget in background thread
     bigquery_tracker.record_game(ip, winner, moves, difficulty)
+
+    # Log full trajectory for offline retraining and opening-book construction.
+    # Only worth storing when the human wins or draws (AI losses are the learning signal).
+    move_sequence  = data.get("move_sequence") or []
+    human_player_v = data.get("human_player", 1)
+    if (winner in ("human", "draw")
+            and isinstance(move_sequence, list)
+            and 6 < len(move_sequence) <= 42
+            and all(isinstance(m, int) and 0 <= m <= 6 for m in move_sequence)):
+        bigquery_tracker.record_human_game(ip, winner, move_sequence, difficulty, human_player_v)
 
     return jsonify({"success": True})
 
@@ -349,7 +376,19 @@ def get_move():
     bigquery_tracker.record_telemetry(checkpoint_name, simulations, inference_time)
     
     best_move = int(np.argmax(mcts_probs))
-    
+
+    # Opening book: if MCTS picked a historically-losing move in early positions,
+    # steer toward the second-best option instead.
+    piece_count = int(np.count_nonzero(board_arr))
+    if _opening_book and piece_count < 12:
+        book_entry = _opening_book.get(_book_hash(board_arr))
+        if book_entry and book_entry.get("count", 0) >= 5 and best_move == book_entry["avoid_move"]:
+            for m in sorted(range(7), key=lambda m: mcts_probs[m], reverse=True):
+                if m != book_entry["avoid_move"] and game.board[0][m] == 0:
+                    print(f"[OpeningBook] col {best_move}→{m} (avoid_move seen {book_entry['count']}×)")
+                    best_move = int(m)
+                    break
+
     # ── Step 1: Detect Winning Cells ──
     winning_cells = []
     game_clone = game.clone()
@@ -686,6 +725,21 @@ def api_leaderboard():
     return jsonify(data)
 
 
+# News banner shown for one week after deployment, then silently disappears.
+_NEWS_EXPIRY = datetime.date(2026, 4, 30)
+_NEWS_BANNER = (
+    "New: stronger model deployed · "
+    "the AI now learns from games you win — "
+    "your victories are used to retrain and build an opening book"
+)
+
+def _with_news(d: dict) -> dict:
+    """Inject news_banner into a welcome-strings dict while within the expiry window."""
+    if datetime.date.today() <= _NEWS_EXPIRY:
+        return {**d, "news_banner": _NEWS_BANNER}
+    return d
+
+
 # Strings shown in the welcome toast — Gemini translates these per country.
 _ENGLISH_STRINGS = {
     "greeting":         "Thank you for joining me from {country}!",
@@ -722,11 +776,11 @@ def welcome_strings():
     country = request.args.get("country", "").strip()
 
     if country.lower() in _ENGLISH_COUNTRIES:
-        return jsonify(_ENGLISH_STRINGS)
+        return jsonify(_with_news(_ENGLISH_STRINGS))
 
     with _strings_cache_lock:
         if country in _strings_cache:
-            return jsonify(_strings_cache[country])
+            return jsonify(_with_news(_strings_cache[country]))
 
     if not gemini_client:
         return jsonify(_ENGLISH_STRINGS)
@@ -756,11 +810,11 @@ def welcome_strings():
         if set(translated.keys()) == set(_ENGLISH_STRINGS.keys()):
             with _strings_cache_lock:
                 _strings_cache[country] = translated
-            return jsonify(translated)
+            return jsonify(_with_news(translated))
     except Exception as e:
         print(f"[welcome_strings] Translation failed for {country!r}: {e}")
 
-    return jsonify(_ENGLISH_STRINGS)
+    return jsonify(_with_news(_ENGLISH_STRINGS))
 
 
 @app.route("/api/geoip")
