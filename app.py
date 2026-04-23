@@ -1004,7 +1004,7 @@ _KOFI_FALLBACKS = [
 
 def _pick_fallback():
     import hashlib, datetime
-    seed = hashlib.md5(datetime.date.today().isoformat().encode()).digest()[0]
+    seed = hashlib.md5(datetime.date.today().isoformat().encode(), usedforsecurity=False).digest()[0]
     return _KOFI_FALLBACKS[seed % len(_KOFI_FALLBACKS)]
 
 _kofi_tagline = _pick_fallback()
