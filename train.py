@@ -137,21 +137,6 @@ if os.path.exists(BUFFER_PATH):
     except Exception as e:
         print(f"[{get_timestamp()}] Warning: Could not load replay buffer: {e}")
 
-# Seed the buffer with human-win games from BigQuery so the model trains on
-# positions it lost from — positions self-play never generates.
-bigquery_tracker.init()
-if bigquery_tracker._enabled:
-    try:
-        print(f"[{get_timestamp()}] Loading human games from BigQuery...")
-        _hg_raw  = bigquery_tracker.get_human_games(limit=2000)
-        _hg_data = _human_games_to_training_data(_hg_raw)
-        if _hg_data:
-            memory.extend(_hg_data)
-            print(f"[{get_timestamp()}] Added {len(_hg_data):,} states from {len(_hg_raw)} human games")
-        del _hg_raw, _hg_data
-    except Exception as _e:
-        print(f"[{get_timestamp()}] Warning: Could not load human games: {_e}")
-
 # ── Utilities ─────────────────────────────────────────────────────────────────
 
 def _human_games_to_training_data(games_data: list) -> list:
@@ -198,6 +183,22 @@ def _human_games_to_training_data(games_data: list) -> list:
                 torch.tensor([value], dtype=torch.float32),
             ))
     return all_data
+
+
+# Seed the buffer with human-win games from BigQuery so the model trains on
+# positions it lost from — positions self-play never generates.
+bigquery_tracker.init()
+if bigquery_tracker._enabled:
+    try:
+        print(f"[{get_timestamp()}] Loading human games from BigQuery...")
+        _hg_raw  = bigquery_tracker.get_human_games(limit=2000)
+        _hg_data = _human_games_to_training_data(_hg_raw)
+        if _hg_data:
+            memory.extend(_hg_data)
+            print(f"[{get_timestamp()}] Added {len(_hg_data):,} states from {len(_hg_raw)} human games")
+        del _hg_raw, _hg_data
+    except Exception as _e:
+        print(f"[{get_timestamp()}] Warning: Could not load human games: {_e}")
 
 
 class ReplayBufferDataset(torch.utils.data.Dataset):
