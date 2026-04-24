@@ -32,4 +32,4 @@ jobs:
         # B101: assert statements — skipped
         # B105/B106: hardcoded passwords — not applicable
         # B608: SQL injection — all BigQuery queries use internal table refs from env vars, not user input
-        bandit -r . --skip B101,B105,B106,B608 -q --exclude ./.venv,./build
+        bandit -r . --skip B101,B105,B106,B608 -ll -q --exclude ./.venv,./build

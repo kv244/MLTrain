@@ -568,6 +568,115 @@ def assess_move():
         "winning_cells": winning_cells
     })
 
+@app.route("/api/game_summary", methods=["POST"])
+@limiter.limit("10 per hour")
+def game_summary():
+    """Replay a completed game and identify the AI's weakest move (largest deviation from optimal).
+
+    Algorithm:
+      - Replay move_sequence using a fresh Connect4 game.
+      - At each AI turn, run a short MCTS search (temperature=1.0 for proportional probs).
+      - quality_ratio = p_actual / p_best:  1.0 = AI played the best move, ~0.0 = blunder.
+      - Tactical-override plies (immediate win/block) are skipped — those are forced moves.
+      - Return the ply with the lowest quality_ratio as the "blunder".
+
+    Body:  { "model": str, "move_sequence": [col,...], "human_player": 1|-1,
+             "simulations": int (default 100, max 200) }
+    Returns: { "blunder_ply": int, "blunder_col": int, "better_col": int,
+               "quality_ratio": float }
+          or { "blunder": null } when all AI moves were forced/tactical.
+    """
+    data = request.json
+    if not data:
+        return jsonify({"error": "Missing or invalid JSON"}), 400
+
+    checkpoint_name = data.get("model", "")
+    move_sequence   = data.get("move_sequence") or []
+    human_player    = data.get("human_player", 1)
+
+    # Validate move_sequence: must be a list of 7–42 ints in [0,6].
+    # < 7 moves: game can't have ended legitimately; > 42: board only has 42 cells.
+    if (not isinstance(move_sequence, list)
+            or not (7 <= len(move_sequence) <= 42)
+            or not all(isinstance(m, int) and 0 <= m <= 6 for m in move_sequence)):
+        return jsonify({"error": "Invalid move_sequence"}), 400
+
+    if human_player not in (1, -1):
+        return jsonify({"error": "Invalid human_player"}), 400
+
+    # Cap per-turn sim budget so the full replay completes quickly on CPU.
+    # Typical game: ~5 AI turns × 100 sims = ~500 sims total.
+    try:
+        simulations = max(50, min(int(data.get("simulations", 100)), 200))
+    except (TypeError, ValueError):
+        return jsonify({"error": "Invalid simulations value"}), 400
+
+    checkpoint = _resolve_checkpoint(checkpoint_name)
+    if not checkpoint:
+        return jsonify({"error": "Invalid model"}), 400
+
+    model, error = get_model(str(checkpoint))
+    if error:
+        return jsonify({"error": f"Failed to load model: {error}"}), 503
+
+    game = Connect4()
+
+    # worst_ai_move: tracks the ply where the AI deviated most from optimal.
+    worst_ai_move = None  # dict: { ply, col, better_col, quality_ratio }
+
+    for ply, col in enumerate(move_sequence):
+        # Only evaluate positions where it was the AI's turn.
+        if game.current_player != human_player:
+            # temperature=1.0: probs are proportional to visit counts, giving a
+            # continuous quality ratio. temperature=0 collapses to one-hot, which
+            # would score every non-best move as quality_ratio=0 (all equal "blunders").
+            probs, root = run_mcts_simulations(
+                game, model, device,
+                num_sims=simulations,
+                temperature=1.0,
+                add_dirichlet_noise=False,
+                return_root=True,
+            )
+
+            # root is None when tactical override fired (forced win/block move).
+            # Those are correct-by-definition; skip quality evaluation.
+            if root is not None:
+                p_best   = float(np.max(probs))
+                p_actual = float(probs[col]) if 0 <= col < 7 else 0.0
+                ratio    = p_actual / p_best if p_best > 0.0 else 1.0
+                better_col = int(np.argmax(probs))
+
+                if worst_ai_move is None or ratio < worst_ai_move["quality_ratio"]:
+                    worst_ai_move = {
+                        "ply":           ply,
+                        "col":           col,
+                        "better_col":    better_col,
+                        "quality_ratio": ratio,
+                    }
+
+        # Advance game state — called ONCE per ply, AFTER the MCTS block above.
+        # game.play() mutates board + current_player; calling it inside the MCTS
+        # block would corrupt state for all subsequent plies.
+        result = game.play(col)
+        if result is None:
+            # Column was full — malformed sequence; stop replaying.
+            break
+        r, c = result
+        if game.check_win(r, c):
+            break  # Game over — no more plies to evaluate.
+
+    if worst_ai_move is None:
+        # All AI turns were tactical overrides, or the sequence had no AI turns.
+        return jsonify({"blunder": None})
+
+    return jsonify({
+        "blunder_ply":   worst_ai_move["ply"],
+        "blunder_col":   worst_ai_move["col"],
+        "better_col":    worst_ai_move["better_col"],
+        "quality_ratio": round(worst_ai_move["quality_ratio"], 4),
+    })
+
+
 @app.route("/health")
 def health():
     return jsonify({"status": "ok"}), 200

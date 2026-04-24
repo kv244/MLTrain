@@ -192,6 +192,8 @@ function startGame(human_role) {
     _board.classList.add(CHIP_STYLES[Math.floor(Math.random() * CHIP_STYLES.length)]);
 
     clearAssessment();
+    const _gameSummaryCont = document.getElementById('gameSummaryContainer');
+    if (_gameSummaryCont) _gameSummaryCont.innerHTML = '';
     WinEffects.reset();
     
     _boardArea.classList.remove('hidden');
@@ -389,6 +391,33 @@ function syncAudioUI(isPlaying) {
 function clearAssessment() {
     document.getElementById('assessmentContainer').innerHTML = '';
     clearBestMoveHint();
+}
+
+// Show a brief note about the AI's weakest move after the human wins.
+// Called asynchronously once /api/game_summary responds.
+function showGameSummary(data) {
+    const container = document.getElementById('gameSummaryContainer');
+    if (!container) return;
+    // Server returns {"blunder": null} when all AI moves were forced tactical overrides.
+    // Server returns {"blunder_ply": N, ...} when a blunder was found.
+    // blunder_ply == null covers both the explicit null-blunder response and network errors.
+    if (!data || data.blunder_ply == null) {
+        container.innerHTML = '';
+        return;
+    }
+    // quality_ratio: 1.0 = optimal, 0.0 = completely wrong column
+    const pctOff = Math.round((1 - data.quality_ratio) * 100);
+    let msg;
+    if (data.better_col !== data.blunder_col) {
+        msg = `AI's toughest moment: move ${data.blunder_ply + 1} · played col ${data.blunder_col + 1}, optimal was col ${data.better_col + 1} (${pctOff}% off)`;
+    } else {
+        msg = `AI played optimally throughout — no clear blunder found`;
+    }
+    const el = document.createElement('div');
+    el.className = 'game-summary-blunder';
+    el.textContent = msg;
+    container.innerHTML = '';
+    container.appendChild(el);
 }
 
 function clearBestMoveHint() {
@@ -801,6 +830,30 @@ function endGame(message, winningLine = null) {
                 human_player:  humanPlayer
             })
         }).catch(e => console.error("Telemetry log failed:", e));
+
+        // After a human win, replay the game server-side to find the AI's weakest move.
+        // Capture moveCount now so we can discard a stale response if a new game starts.
+        if (winnerId === "human" && moveSequence.length >= 7) {
+            const summaryMoveCount = moveCount;
+            const summarySeq = moveSequence.slice(); // snapshot before it gets reset
+            fetch('/api/game_summary', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({
+                    model:         _modelSelect.value || "unknown",
+                    move_sequence: summarySeq,
+                    human_player:  humanPlayer,
+                    simulations:   100
+                })
+            })
+            .then(r => r.ok ? r.json() : null)
+            .then(data => {
+                // Ignore if a new game has started since we fired this request
+                if (moveCount !== summaryMoveCount || !gameOver) return;
+                showGameSummary(data);
+            })
+            .catch(e => console.error("Game summary fetch failed:", e));
+        }
 
         const kofi = document.getElementById('kofi-container');
         if (kofi) kofi.style.display = 'flex';

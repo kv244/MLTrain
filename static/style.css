@@ -675,6 +675,26 @@ For now, two prominent corners are very Manga-style. */
     }
 }
 
+/* Post-game AI blunder summary (shown after human wins) */
+.game-summary-container {
+    margin: 0.4rem 0;
+    min-height: 0;
+    display: flex;
+    justify-content: center;
+}
+
+.game-summary-blunder {
+    font-size: 0.78rem;
+    color: var(--neon-cyan);
+    opacity: 0.85;
+    background: rgba(0, 255, 255, 0.06);
+    border: 1px solid rgba(0, 255, 255, 0.2);
+    border-radius: 8px;
+    padding: 0.4rem 0.9rem;
+    animation: quote-fade 0.6s ease-out forwards;
+    letter-spacing: 0.4px;
+}
+
 /* Missed Move Highlighting */
 .best-move-hint {
     background-color: rgba(35, 134, 54, 0.4) !important;
