@@ -604,10 +604,11 @@ def game_summary():
     if human_player not in (1, -1):
         return jsonify({"error": "Invalid human_player"}), 400
 
-    # Cap per-turn sim budget so the full replay completes quickly on CPU.
-    # Typical game: ~5 AI turns × 100 sims = ~500 sims total.
+    # Hard cap at 100 sims per AI turn regardless of what the caller sends.
+    # Worst case: 21 AI turns × 100 sims = 2100 sims total, safely under
+    # Gunicorn's 30s worker timeout. 200 sims × 21 turns risks a timeout kill.
     try:
-        simulations = max(50, min(int(data.get("simulations", 100)), 200))
+        simulations = max(50, min(int(data.get("simulations", 100)), 100))
     except (TypeError, ValueError):
         return jsonify({"error": "Invalid simulations value"}), 400
 
