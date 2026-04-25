@@ -53,29 +53,8 @@ jobs:
               exit 1
             fi
 
-            # Backup source code only if space allows
-            if [ "$FREE_SPACE" -gt 1500 ]; then
-              mkdir -p ~/backups
-              TIMESTAMP=$(date +%Y%m%d_%H%M%S)
-              tar -czf ~/backups/mltrain_backup_${TIMESTAMP}.tar.gz . \
-                --exclude="./.git" --exclude="./.venv" --exclude="./.venv.backup" \
-                --exclude="./__pycache__" --exclude="./*.pt" --exclude="./*.pt.*" \
-                --exclude="./*.onnx" --exclude="./*.onnx.data" \
-                --exclude="./*.csv" || true
-              echo "Backup created."
-            else
-              echo "Space under 1500MB — skipping backup to preserve headroom."
-            fi
-
-            # Backup current venv for rollback only if space allows (venv ~1.7GB)
-            FREE_NOW=$(df -m / | awk 'NR==2 {print $4}')
-            if [ "$FREE_NOW" -gt 2000 ] && [ -d .venv ]; then
-              rm -rf .venv.backup && cp -r .venv .venv.backup || true
-              echo "Venv backup created."
-            else
-              echo "Space under 2000MB — skipping venv backup."
-              rm -rf .venv.backup || true
-            fi
+            # Source code backup disabled — git is source of truth, disk is too small
+            # Venv backup disabled — too large (~2.1G) for the 10G disk; venv rebuilds from requirements.txt
 
             git pull origin main
 
@@ -90,14 +69,11 @@ jobs:
           ssh ${{ secrets.GCP_VM_USER }}@${{ secrets.GCP_VM_HOST }} << 'EOF'
             sleep 5
             if ! systemctl is-active --quiet ${{ env.SYSTEMD_SERVICE }}; then
-              echo "Deploy failed — rolling back..."
+              echo "Deploy failed."
               journalctl -u ${{ env.SYSTEMD_SERVICE }} -n 30 --no-pager
-              [ -d .venv.backup ] && (rm -rf .venv && mv .venv.backup .venv) || true
-              sudo systemctl restart ${{ env.SYSTEMD_SERVICE }}
               exit 1
             fi
             echo "Deploy successful."
-            rm -rf .venv.backup
           EOF
 
       - name: Update ONNX Model Weight
