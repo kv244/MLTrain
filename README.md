@@ -355,13 +355,23 @@ Set a threshold (e.g. $20/month) — GCP will email you before you're surprised.
 
 ## Version History
 
-### [v2.1.2] - 2026-04-18
+### [v2.2.0] - 2026-04-25
 
-#### Web App — Bug Fixes
-- **"Generation failed" false negative** (`app.py`, systemd service): root cause was `--workers 2` in the gunicorn service file. `_bg_update_state` is in-process memory — with two workers, admin POST hits worker A but `bg_status` polls hit worker B (which has no state), producing a spurious failure message even when the image generated successfully. Fixed by enforcing `--workers 1`. Documented the constraint in the README with a note on the Redis migration path for future scaling.
-- **Concurrent startup/admin background race** (`app.py`): the startup stale-background check called `update_background()` directly without setting `_bg_update_state["running"]`, so a manual admin trigger arriving during boot would race with the startup update over the same `.tmp` file. Fixed: startup update now routes through `_bg_update_state` so the admin endpoint correctly sees it as already running and blocks the duplicate.
-- **`num_workers` DataLoader crash** (`train.py`): reverted `num_workers` from 4 to 0. On Windows, `spawn`-based DataLoader workers re-import the `train` module, re-executing module-level CUDA initialisation (model allocation, checkpoint load, replay buffer load) in each worker — causing OOM/conflicts and silent crashes with no iteration output in the log.
-- **Iteration log line lost on crash** (`train.py`): added `flush=True` to the `end=""` per-iteration print so the line is written to `train_recovery.log` immediately, even if the process crashes before the loss figures are appended.
+#### Observability & Operations
+
+- **GCP Cloud Logging** (`app.py`, `bigquery_tracker.py`, `background_manager.py`): Replaced all `print()` calls with named Python loggers wired to `google.cloud.logging` on GCP (falls back to `basicConfig` locally). Each module gets its own logger (`app`, `bigquery_tracker`, `background_manager`) with appropriate severity levels — `DEBUG` for per-request noise (adaptive MCTS, opening book), `INFO` for startup events, `WARNING` for transient failures, `ERROR` for exceptions. Added `google-cloud-logging` to `requirements.txt`.
+- **Train logging** (`train.py`): Extended the `_Tee` stdout wrapper to also capture `sys.stderr`, and added `logging.basicConfig(stream=sys.stdout)` so that `bigquery_tracker` log calls land in `train_recovery.log` alongside training output.
+- **GCP disk space alert**: Cloud Monitoring alert policy created — fires when VM disk usage exceeds 90% (< 10% free), with email notification to the owner.
+- **GCP log retention**: Confirmed `_Default` log bucket retention set to 30 days; GCP trims automatically.
+
+#### Web App
+
+- **Opening book auto-rebuild** (`app.py`): New `/api/admin/rebuild_opening_book` endpoint runs `build_opening_book.py` in a background thread and hot-reloads the result into memory without a server restart. Protected by `ADMIN_TOKEN`. A Cloud Scheduler job hits this endpoint weekly (Sundays 03:00 UTC) to keep the book up to date as human-win games accumulate in BigQuery.
+- **Gemini assessment cache** (`app.py`): Gemini commentary for move assessments is now cached for 48 hours, keyed by `(score, same_as_best)`. Reduces repetitive API calls — first call per combination hits Gemini, subsequent calls return the cached label and quote instantly.
+
+#### Deploy
+
+- **Disabled source/venv backups** (`deploy.yml`): Source backup (`tar`) and venv backup (`cp -r .venv .venv.backup`) removed from the deploy workflow. The 10 GB VM disk was at 97% capacity — the `.venv.backup` alone consumed 2.1 GB. Git is the source of truth; the venv rebuilds from `requirements.txt`.
 
 ### [v2.1.3] - 2026-04-19
 
@@ -371,6 +381,7 @@ Set a threshold (e.g. $20/month) — GCP will email you before you're surprised.
 - **Tactical override missing from evaluation** (`self_play.py`): `run_batched_evaluation` did not apply the instant-win / forced-block override that both self-play and production use. A model could be rejected by the champion gate for failing to see a 1-move win that the production environment would have caught automatically. Fixed: evaluation now mirrors production move selection.
 - **Binomial gating rounding** (`train.py`): `round(wins)` uses Python 3 banker's rounding (round-half-to-even), so `round(50.5)` → 50, silently dropping half-wins from draws. Changed to `int(wins + 0.5)` for consistent round-half-up behaviour.
 - **`_telemetry_table_ref` not declared global** (`bigquery_tracker.py`): `init()` assigned `_telemetry_table_ref` as a local variable, leaving the module-level reference as `None`. `record_telemetry()` would crash on the first call. Fixed by adding it to the `global` declaration.
+- **Evaluation depth increased** (`train.py`): Bumped `EVAL_SIMS` from 200 to 800. This deeper search is designed to break the "Connect 4 stalemate" where high-strength models draw frequently at lower simulation depths. The batched GPU inference makes 800-sim gating feasible in under 8 minutes.
 
 #### Features
 
@@ -378,10 +389,13 @@ Set a threshold (e.g. $20/month) — GCP will email you before you're surprised.
 - **Leaderboard** (web app): Sidebar button opens a modal showing the 5 most recent player wins with name, difficulty, sim count, move count, and date. Backed by a new `/api/leaderboard` endpoint with 60-second BQ cache.
 - **SEO improvements**: JSON-LD `WebApplication` schema, `sitemap.xml`, `robots.txt`, `manifest.json` (PWA), `theme-color`, `preconnect` for Google Fonts, keyword-rich `<title>` and `<h1>`, structured 3-column footer (hidden on mobile).
 
-### [v2.1.2] - 2026-04-19
+### [v2.1.2] - 2026-04-18
 
-#### Training Rigor
-- **Evaluation depth increased** (`train.py`): Bumped `EVAL_SIMS` from 200 to 800. This deeper search is designed to break the "Connect 4 stalemate" where high-strength models draw frequently at lower simulation depths. The batched GPU inference makes 800-sim gating feasible in under 8 minutes.
+#### Web App — Bug Fixes
+- **"Generation failed" false negative** (`app.py`, systemd service): root cause was `--workers 2` in the gunicorn service file. `_bg_update_state` is in-process memory — with two workers, admin POST hits worker A but `bg_status` polls hit worker B (which has no state), producing a spurious failure message even when the image generated successfully. Fixed by enforcing `--workers 1`. Documented the constraint in the README with a note on the Redis migration path for future scaling.
+- **Concurrent startup/admin background race** (`app.py`): the startup stale-background check called `update_background()` directly without setting `_bg_update_state["running"]`, so a manual admin trigger arriving during boot would race with the startup update over the same `.tmp` file. Fixed: startup update now routes through `_bg_update_state` so the admin endpoint correctly sees it as already running and blocks the duplicate.
+- **`num_workers` DataLoader crash** (`train.py`): reverted `num_workers` from 4 to 0. On Windows, `spawn`-based DataLoader workers re-import the `train` module, re-executing module-level CUDA initialisation (model allocation, checkpoint load, replay buffer load) in each worker — causing OOM/conflicts and silent crashes with no iteration output in the log.
+- **Iteration log line lost on crash** (`train.py`): added `flush=True` to the `end=""` per-iteration print so the line is written to `train_recovery.log` immediately, even if the process crashes before the loss figures are appended.
 
 ### [v2.1.1] - 2026-04-18
 
@@ -527,7 +541,7 @@ Set a threshold (e.g. $20/month) — GCP will email you before you're surprised.
 - **Balanced Opening Curriculum**: Pre-seeded self-play games with **2–4 random moves** for diverse state coverage.
 - **Robust Champion Gating**: Increased model evaluation threshold to **100 games** at a 55% win-rate for promotion.
 
-### [v1.2.0] - 2023-04-05
+### [v1.2.0] - 2026-04-05
 - **GCP Environment Upgrades**: Implemented **Vertex AI Imagen** integration in `background_manager.py` with atomic `.tmp` → `rename` file saving.
 - **Environment Parity**: Added comprehensive security and configuration documentation to `.env.example`.
 
