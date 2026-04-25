@@ -522,38 +522,51 @@ def assess_move():
         try:
             move_quality_pct = int(round(p_move / max_p * 100)) if max_p > 0 else 0
             same_as_best = (move == best_move)
-            move_context = (
-                f"played column {move} (the optimal move was column {best_move}), "
-                f"capturing {move_quality_pct}% of the AI's confidence"
-                if not same_as_best else
-                f"played column {move}, which IS the optimal move ({move_quality_pct}% confidence match)"
-            )
-            prompt = (
-                f"You are the 'Grid Overseer', a cynical and sophisticated AI commentator for a high-stakes cyberpunk Connect 4 terminal. "
-                f"A player just {move_context}. Rated {score}/5 stars.\n"
-                f"Provide a unique, non-generic response in the following format:\n"
-                f"LABEL: [catchy 1-2 word label, e.g. 'Neural Spike', 'Logic Leak', 'Ghost Protocol']\n"
-                f"QUOTE: [short atmospheric quote referencing the move, max 10 words]\n"
-                f"Tone guide: 1-2 stars (mocking/cold), 3-4 stars (neutral/impressed), 5 stars (fascinated/alarmed). "
-                f"Use cyberpunk slang. Output ONLY the requested format."
-            )
-            response = gemini_client.models.generate_content(
-                model="gemini-2.0-flash",
-                contents=prompt,
-                config=genai_types.GenerateContentConfig(
-                    http_options=genai_types.HttpOptions(timeout=15000)
+
+            # Cache Gemini commentary for 48 hours keyed by (score, same_as_best).
+            # Avoids repetitive API calls — the tone matters more than the exact move.
+            _cache_key = (score, same_as_best)
+            _cached = _assess_comment_cache.get(_cache_key)
+            if _cached and time.time() < _cached["expires"]:
+                comment, quote = _cached["comment"], _cached["quote"]
+            else:
+                move_context = (
+                    f"played column {move} (the optimal move was column {best_move}), "
+                    f"capturing {move_quality_pct}% of the AI's confidence"
+                    if not same_as_best else
+                    f"played column {move}, which IS the optimal move ({move_quality_pct}% confidence match)"
                 )
-            )
-            responseText = response.text
-            
-            # More robust parsing using regex or keyword search
-            label_match = re.search(r"LABEL:\s*(.*)", responseText, re.IGNORECASE)
-            quote_match = re.search(r"QUOTE:\s*(.*)", responseText, re.IGNORECASE)
-            
-            if label_match:
-                comment = label_match.group(1).split("\n")[0].strip().strip('"*#')
-            if quote_match:
-                quote = quote_match.group(1).split("\n")[0].strip().strip('"*#')
+                prompt = (
+                    f"You are the 'Grid Overseer', a cynical and sophisticated AI commentator for a high-stakes cyberpunk Connect 4 terminal. "
+                    f"A player just {move_context}. Rated {score}/5 stars.\n"
+                    f"Provide a unique, non-generic response in the following format:\n"
+                    f"LABEL: [catchy 1-2 word label, e.g. 'Neural Spike', 'Logic Leak', 'Ghost Protocol']\n"
+                    f"QUOTE: [short atmospheric quote referencing the move, max 10 words]\n"
+                    f"Tone guide: 1-2 stars (mocking/cold), 3-4 stars (neutral/impressed), 5 stars (fascinated/alarmed). "
+                    f"Use cyberpunk slang. Output ONLY the requested format."
+                )
+                response = gemini_client.models.generate_content(
+                    model="gemini-2.0-flash",
+                    contents=prompt,
+                    config=genai_types.GenerateContentConfig(
+                        http_options=genai_types.HttpOptions(timeout=15000)
+                    )
+                )
+                responseText = response.text
+
+                label_match = re.search(r"LABEL:\s*(.*)", responseText, re.IGNORECASE)
+                quote_match = re.search(r"QUOTE:\s*(.*)", responseText, re.IGNORECASE)
+
+                if label_match:
+                    comment = label_match.group(1).split("\n")[0].strip().strip('"*#')
+                if quote_match:
+                    quote = quote_match.group(1).split("\n")[0].strip().strip('"*#')
+
+                _assess_comment_cache[_cache_key] = {
+                    "comment": comment,
+                    "quote":   quote,
+                    "expires": time.time() + 172800,  # 48 hours
+                }
 
         except Exception as e:
             logger.error("Gemini assessment error: %s", e)
@@ -814,6 +827,7 @@ def api_recent_winner():
 
 
 _leaderboard_cache = {"data": None, "expires": 0}
+_assess_comment_cache: dict = {}  # (score, same_as_best) -> {comment, quote, expires}
 _leaderboard_cache_lock = threading.Lock()
 
 @app.route("/api/leaderboard")
