@@ -1,9 +1,12 @@
+import logging
 import os
 import time
 import pathlib
 from google import genai
 from google.genai import types
 from dotenv import load_dotenv
+
+logger = logging.getLogger(__name__)
 
 load_dotenv(pathlib.Path(__file__).parent / ".env")
 
@@ -26,14 +29,14 @@ def update_background():
     GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
 
     if not PROJECT_ID:
-        print("[BackgroundManager] Error: GCP_PROJECT_ID not set")
+        logger.error("GCP_PROJECT_ID not set")
         return False
 
     if not GEMINI_API_KEY:
-        print("[BackgroundManager] Error: GEMINI_API_KEY not set in environment")
+        logger.error("GEMINI_API_KEY not set in environment")
         return False
 
-    print("[BackgroundManager] Starting background renewal...")
+    logger.info("Starting background renewal...")
     
     tmp_path = None
     try:
@@ -50,7 +53,7 @@ def update_background():
             contents=system_prompt
         )
         image_prompt = response.text.strip()
-        print(f"[BackgroundManager] Gemini prompt: {image_prompt}")
+        logger.debug("Gemini prompt: %s", image_prompt)
 
         # 2. Generate Image via Vertex AI Imagen (using Vertex AI backend via genai SDK)
         # Note: vertexai=True uses the Vertex AI backend for this client.
@@ -60,7 +63,7 @@ def update_background():
             location=LOCATION
         )
         
-        print("[BackgroundManager] Requesting image from Vertex AI Imagen (v3)...")
+        logger.info("Requesting image from Vertex AI Imagen (v3)...")
         res_image = vertex_client.models.generate_images(
             model="imagen-3.0-generate-001",
             prompt=image_prompt,
@@ -71,7 +74,7 @@ def update_background():
         )
         
         if not res_image.generated_images:
-            print("[BackgroundManager] Error: No images were generated (possibly blocked by safety filters).")
+            logger.warning("No images were generated (possibly blocked by safety filters).")
             return False
 
         # 3. Save the image atomically
@@ -80,19 +83,19 @@ def update_background():
         res_image.generated_images[0].image.save(str(tmp_path))
         tmp_path.replace(BG_PATH)
         
-        print("[BackgroundManager] Background updated successfully.")
+        logger.info("Background updated successfully.")
         return True
 
     except Exception as e:
-        print(f"[BackgroundManager] Error during background update: {e}")
+        logger.error("Error during background update: %s", e)
         return False
     finally:
         if tmp_path and tmp_path.exists():
             try:
                 tmp_path.unlink()
             except Exception as e:
-                print(f"[BackgroundManager] Failed to clean up .tmp file: {e}")
+                logger.warning("Failed to clean up .tmp file: %s", e)
 
 if __name__ == "__main__":
-    # If run directly, force an update
+    logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(levelname)s %(message)s")
     update_background()

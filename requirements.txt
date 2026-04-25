@@ -13,5 +13,6 @@ scipy
 google-cloud-aiplatform
 google-genai
 google-cloud-bigquery
+google-cloud-logging
 matplotlib
 Pillow

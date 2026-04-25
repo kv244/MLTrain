@@ -16,6 +16,21 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+
+      - name: Set up gcloud
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Grant VM service account logging.logWriter
+        run: |
+          gcloud projects add-iam-policy-binding gen-lang-client-0269772194 \
+            --member="serviceAccount:${{ vars.GCP_VM_SA }}" \
+            --role="roles/logging.logWriter" \
+            --condition=None
+
       - name: Set up SSH
         uses: webfactory/ssh-agent@v0.9.0
         with:

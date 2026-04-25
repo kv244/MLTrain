@@ -1,34 +1,29 @@
 """
-bigquery_tracker.py — Connect-4 player analytics via BigQuery
+bigquery_tracker.py — Connect-4 player analytics and telemetry via Google BigQuery.
 
-Table: <GCP_PROJECT_ID>.<BQ_DATASET>.<BQ_TABLE>  (defaults: connect4.player_stats)
-Schema (CLUSTER BY ip_address for fast per-IP lookups):
+This module provides a fire-and-forget interface for logging player sessions, 
+game outcomes, AI inference telemetry, and winning game trajectories.
 
-    ip_address   STRING    visitor IP (primary key for MERGE)
-    country      STRING    from client-side geo-IP lookup
-    first_seen   TIMESTAMP first page visit
-    last_seen    TIMESTAMP most recent activity
-    total_visits INT64     page loads
-    total_games  INT64     completed games
-    player_wins  INT64
-    ai_wins      INT64
-    draws        INT64
-    total_moves  INT64     cumulative moves across all games
+Tables:
+  - player_stats:    Aggregated per-IP session and game statistics.
+  - win_records:     Hall of fame for human players who beat the AI.
+  - move_telemetry:  Performance metrics (latency) for AI model inference.
+  - human_games:     Detailed move sequences for retraining and analysis.
 
-Public API
-----------
-    init()                          — call once at app startup
-    record_session(ip, country)     — upsert on page load (INSERT new / UPDATE returning)
-    record_game(ip, winner, moves)  — update game counters at game end
-
-All BQ operations are fire-and-forget (daemon threads); HTTP responses are never
-blocked waiting for BigQuery.
+Implementation Notes:
+  - All write operations are executed in daemon threads to prevent blocking 
+    the main application (Flask/Gunicorn) response cycle.
+  - MERGE statements are used for idempotent 'upserts' on player statistics.
+  - Tables are clustered by ip_address to optimize frequent per-user lookups.
 """
 
 import json
+import logging
 import os
 import threading
 from google.cloud import bigquery
+
+logger = logging.getLogger(__name__)
 
 PROJECT_ID           = os.environ.get("GCP_PROJECT_ID")
 DATASET              = os.environ.get("BQ_DATASET",             "connect4")
@@ -52,7 +47,7 @@ def init():
     Silent no-op if GCP_PROJECT_ID is not set (local dev)."""
     global _client, _enabled, _table_ref, _win_table_ref, _telemetry_table_ref, _human_games_table_ref
     if not PROJECT_ID:
-        print("[BQTracker] GCP_PROJECT_ID not set — tracking disabled.")
+        logger.warning("GCP_PROJECT_ID not set — tracking disabled.")
         return
     try:
         _client                = bigquery.Client(project=PROJECT_ID)
@@ -61,15 +56,17 @@ def init():
         _telemetry_table_ref   = f"{PROJECT_ID}.{DATASET}.{TELEMETRY_TABLE}"
         _human_games_table_ref = f"{PROJECT_ID}.{DATASET}.{HUMAN_GAMES_TABLE}"
         _enabled               = True
-        print(f"[BQTracker] Enabled → {_table_ref}")
+        logger.info("Enabled → %s", _table_ref)
         threading.Thread(target=_ensure_table,              daemon=True).start()
         threading.Thread(target=_ensure_win_table,          daemon=True).start()
         threading.Thread(target=_ensure_telemetry_table,    daemon=True).start()
         threading.Thread(target=_ensure_human_games_table,  daemon=True).start()
     except Exception as exc:
-        print(f"[BQTracker] Init failed: {exc}")
+        logger.error("Init failed: %s", exc)
 
 
+# Primary analytics table for user retention and overall win/loss ratios.
+# Clustered by ip_address to ensure fast filtering for the dashboard.
 _CREATE_DDL = """
 CREATE TABLE IF NOT EXISTS `{table_ref}` (
     ip_address      STRING    NOT NULL,
@@ -102,11 +99,12 @@ def _ensure_table():
     try:
         _client.query(_CREATE_DDL.format(table_ref=_table_ref)).result()
         _client.query(_ALTER_DDL.format(table_ref=_table_ref)).result()
-        print(f"[BQTracker] Table ready: {_table_ref}")
+        logger.info("Table ready: %s", _table_ref)
     except Exception as exc:
-        print(f"[BQTracker] ensure_table failed: {exc}")
+        logger.error("ensure_table failed: %s", exc)
 
 
+# Hall of Fame table for players who successfully defeat the AlphaZero AI.
 _CREATE_WIN_DDL = """
 CREATE TABLE IF NOT EXISTS `{table_ref}` (
     recorded_at  TIMESTAMP NOT NULL,
@@ -122,11 +120,12 @@ OPTIONS (description = 'Connect-4 AlphaZero — player win hall of fame');
 def _ensure_win_table():
     try:
         _client.query(_CREATE_WIN_DDL.format(table_ref=_win_table_ref)).result()
-        print(f"[BQTracker] Win table ready: {_win_table_ref}")
+        logger.info("Win table ready: %s", _win_table_ref)
     except Exception as exc:
-        print(f"[BQTracker] ensure_win_table failed: {exc}")
+        logger.error("ensure_win_table failed: %s", exc)
 
 
+# Performance monitoring table to track inference latency across different models.
 _CREATE_TELEMETRY_DDL = """
 CREATE TABLE IF NOT EXISTS `{table_ref}` (
     recorded_at          TIMESTAMP NOT NULL,
@@ -140,9 +139,9 @@ OPTIONS (description = 'Connect-4 AlphaZero — per-move inference latency');
 def _ensure_telemetry_table():
     try:
         _client.query(_CREATE_TELEMETRY_DDL.format(table_ref=_telemetry_table_ref)).result()
-        print(f"[BQTracker] Telemetry table ready: {_telemetry_table_ref}")
+        logger.info("Telemetry table ready: %s", _telemetry_table_ref)
     except Exception as exc:
-        print(f"[BQTracker] ensure_telemetry_table failed: {exc}")
+        logger.error("ensure_telemetry_table failed: %s", exc)
 
 
 _CREATE_HUMAN_GAMES_DDL = """
@@ -161,14 +160,16 @@ OPTIONS (description = 'Connect-4 AlphaZero — human win game trajectories for 
 def _ensure_human_games_table():
     try:
         _client.query(_CREATE_HUMAN_GAMES_DDL.format(table_ref=_human_games_table_ref)).result()
-        print(f"[BQTracker] Human games table ready: {_human_games_table_ref}")
+        logger.info("Human games table ready: %s", _human_games_table_ref)
     except Exception as exc:
-        print(f"[BQTracker] ensure_human_games_table failed: {exc}")
+        logger.error("ensure_human_games_table failed: %s", exc)
 
 
 # ── SQL templates ─────────────────────────────────────────────────────────────
 
-# MERGE on ip_address: INSERT new visitors, UPDATE returning ones.
+# Atomic Upsert for visitor sessions. 
+# If IP exists: Update last seen and increment visit count.
+# If IP is new: Insert new record with initial counters.
 _SESSION_MERGE = """
 MERGE `{table_ref}` AS T
 USING (SELECT @ip AS ip_address, @country AS country,
@@ -185,6 +186,8 @@ VALUES
     (S.ip_address, S.country, S.ts, S.ts, 1, 0, 0, 0, 0, 0)
 """
 
+# Atomic update for game statistics.
+# Increments win/loss/draw counters and difficulty-specific game counts.
 _GAME_MERGE = """
 MERGE `{table_ref}` AS T
 USING (SELECT @ip AS ip_address, CURRENT_TIMESTAMP() AS ts) AS S
@@ -213,7 +216,17 @@ VALUES
 # ── Internal query runner ─────────────────────────────────────────────────────
 
 def _run(sql_template, params):
-    """Execute a parameterised query. Called from a daemon thread."""
+    """
+    Executes a parameterized SQL query against the primary analytics table.
+    
+    Args:
+        sql_template (str): SQL string with '{table_ref}' placeholder.
+        params (list): List of bigquery.ScalarQueryParameter objects.
+        
+    Note:
+        Runs in a background thread with a 15s timeout to avoid blocking 
+        frontend requests if BigQuery is slow or throttled.
+    """
     if not _enabled:
         return
     try:
@@ -221,17 +234,22 @@ def _run(sql_template, params):
         _client.query(
             sql_template.format(table_ref=_table_ref),
             job_config=cfg
-        ).result(timeout=15)  # prevent threads hanging indefinitely on slow/unreachable BQ
+        ).result(timeout=15)
     except Exception as exc:
-        print(f"[BQTracker] Query error: {exc}")
+        logger.error("Query error: %s", exc)
 
 
 # ── Public API ────────────────────────────────────────────────────────────────
 
 def record_session(ip_address, country=None):
-    """Upsert a page-load visit.
-    New IP  → INSERT row with visit count = 1 and zero game stats.
-    Known IP → UPDATE last_seen and increment total_visits."""
+    """
+    Records a user's page visit. Increments visit count if the IP is known,
+    otherwise creates a new entry.
+    
+    Args:
+        ip_address (str): The visitor's IP address.
+        country (str, optional): The visitor's country code from geo-IP.
+    """
     params = [
         bigquery.ScalarQueryParameter("ip",      "STRING", ip_address or "unknown"),
         bigquery.ScalarQueryParameter("country", "STRING", country or ""),
@@ -242,7 +260,16 @@ def record_session(ip_address, country=None):
 
 
 def record_win(ip_address, name, difficulty, simulations, moves):
-    """Insert a single win record into the win_records hall-of-fame table."""
+    """
+    Logs a human victory into the hall-of-fame (win_records) table.
+    
+    Args:
+        ip_address (str): The winner's IP address.
+        name (str): The display name of the winner.
+        difficulty (str): The AI difficulty level (easy/medium/hard).
+        simulations (int): Number of MCTS simulations used by the AI.
+        moves (int): Total moves in the game.
+    """
     if not _enabled:
         return
     params = [
@@ -260,18 +287,28 @@ VALUES (CURRENT_TIMESTAMP(), @name, @difficulty, @simulations, @moves, @ip)
 
 
 def _run_raw(sql, params):
-    """Execute a raw parameterised query (no .format substitution)."""
+    """
+    Executes a raw parameterized SQL query without string formatting.
+    Used for tables other than the primary player_stats table.
+    """
     if not _enabled:
         return
     try:
         cfg = bigquery.QueryJobConfig(query_parameters=params)
         _client.query(sql, job_config=cfg).result(timeout=15)
     except Exception as exc:
-        print(f"[BQTracker] Query error: {exc}")
+        logger.error("Query error: %s", exc)
 
 
 def record_telemetry(model, simulations, inference_time_seconds):
-    """Insert one row of inference latency into move_telemetry. Fire-and-forget."""
+    """
+    Logs AI inference performance metrics.
+    
+    Args:
+        model (str): Name or path of the model used.
+        simulations (int): Number of simulations performed for the move.
+        inference_time_seconds (float): Time taken for inference in seconds.
+    """
     if not _enabled:
         return
     sql = """
@@ -287,9 +324,17 @@ VALUES (CURRENT_TIMESTAMP(), @model, @simulations, @inference_time_ms)
 
 
 def record_human_game(ip_address, winner, move_sequence, difficulty="hard", human_player=1):
-    """Store the full move trajectory of a game the human won (or drew).
-    move_sequence: list of column ints in play order (alternating players).
-    Enables offline retraining and opening-book construction."""
+    """
+    Persists the full move sequence of a game for future model training 
+    or opening book generation.
+    
+    Args:
+        ip_address (str): The player's IP address.
+        winner (str): 'human', 'ai', or 'draw'.
+        move_sequence (list): List of column indices representing the moves.
+        difficulty (str): The AI difficulty level.
+        human_player (int): Whether the human was player 1 or 2.
+    """
     if not _enabled or not _human_games_table_ref:
         return
     seq_json = json.dumps([int(m) for m in move_sequence]) if move_sequence else "[]"
@@ -309,9 +354,19 @@ VALUES (CURRENT_TIMESTAMP(), @winner, @move_sequence, @num_moves, @difficulty, @
 
 
 def get_human_games(winner_filter="human", limit=1000):
-    """Return game records as a list of dicts for training or book-building.
-    Each dict: {move_sequence: [int, ...], winner: str, human_player: int}
-    Blocking call — intended for offline training scripts, not request handlers."""
+    """
+    Retrieves recorded game trajectories for offline analysis or training.
+    
+    Args:
+        winner_filter (str): Filter by winner ('human', 'ai', 'draw').
+        limit (int): Maximum number of records to return.
+        
+    Returns:
+        list[dict]: A list of game records with move_sequence and metadata.
+        
+    Warning:
+        This is a synchronous, blocking call. Use only in offline scripts.
+    """
     if not _enabled or not _human_games_table_ref:
         return []
     try:
@@ -336,15 +391,20 @@ def get_human_games(winner_filter="human", limit=1000):
             for r in rows if r.move_sequence
         ]
     except Exception as exc:
-        print(f"[BQTracker] get_human_games failed: {exc}")
+        logger.error("get_human_games failed: %s", exc)
         return []
 
 
 def record_game(ip_address, winner, moves, difficulty="hard"):
-    """Increment game outcome counters for this IP after a completed game.
-    winner:     'human' | 'ai' | 'draw'
-    moves:      total half-moves in the game
-    difficulty: 'easy' | 'medium' | 'hard'"""
+    """
+    Updates the aggregated game statistics for a specific player (IP).
+    
+    Args:
+        ip_address (str): The player's IP address.
+        winner (str): 'human', 'ai', or 'draw'.
+        moves (int): Total half-moves in the game.
+        difficulty (str): The AI difficulty level.
+    """
     diff = difficulty.lower() if difficulty else "hard"
     params = [
         bigquery.ScalarQueryParameter("ip",         "STRING", ip_address or "unknown"),

@@ -100,8 +100,9 @@ scheduler = torch.optim.lr_scheduler.MultiStepLR(
 )
 
 import sys
+import logging
 
-# Mirror every print() to train_recovery.log without changing call sites.
+# Mirror every print() and logging call to train_recovery.log.
 # Append mode so restarts don't clobber earlier runs.
 class _Tee:
     def __init__(self, *files):
@@ -113,6 +114,15 @@ class _Tee:
 
 _log_fh = open("train_recovery.log", "a", encoding="utf-8", buffering=1)
 sys.stdout = _Tee(sys.__stdout__, _log_fh)
+sys.stderr = _Tee(sys.__stderr__, _log_fh)
+
+# Route logging (used by bigquery_tracker et al.) to stdout so it passes
+# through the tee above and lands in train_recovery.log.
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s %(name)s %(levelname)s %(message)s",
+    stream=sys.stdout,
+)
 
 # torch.compile gives ~20-30% extra throughput via kernel fusion on PyTorch 2.x.
 # Falls back gracefully on older installs.

@@ -19,8 +19,27 @@ import openvino as ov
 from google import genai
 from google.genai import types as genai_types
 from dotenv import load_dotenv
+import logging
 
 load_dotenv(pathlib.Path(__file__).parent / ".env")
+
+
+def _setup_logging():
+    """Wire Python's logging to Google Cloud Logging when running on GCP.
+    Falls back to stderr basicConfig for local dev / missing package."""
+    try:
+        import google.cloud.logging as cloud_logging
+        cloud_logging.Client().setup_logging()
+    except Exception:
+        logging.basicConfig(
+            level=logging.INFO,
+            format="%(asctime)s %(name)s %(levelname)s %(message)s",
+        )
+
+
+_setup_logging()
+logger = logging.getLogger(__name__)
+
 
 def _git_rev() -> str:
     try:
@@ -56,8 +75,8 @@ limiter = Limiter(
 )
 
 if LIMITER_STORAGE.startswith("memory://"):
-    print(
-        "[WARNING] Rate limiter is using in-process memory storage. "
+    logger.warning(
+        "Rate limiter is using in-process memory storage. "
         "This does not work correctly with multi-worker Gunicorn. "
         "Set LIMITER_STORAGE_URI to a Redis URL for production."
     )
@@ -82,9 +101,9 @@ if _BOOK_PATH.exists():
     try:
         with open(_BOOK_PATH) as _f:
             _opening_book = json.load(_f)
-        print(f"[App] Opening book loaded: {len(_opening_book)} positions")
+        logger.info("Opening book loaded: %d positions", len(_opening_book))
     except Exception as _e:
-        print(f"[App] Opening book load failed: {_e}")
+        logger.error("Opening book load failed: %s", _e)
 
 def _book_hash(board_arr: np.ndarray) -> str:
     return hashlib.sha256(board_arr.astype(np.int8).tobytes()).hexdigest()[:16]
@@ -124,7 +143,7 @@ class OpenVINOModel:
     def __init__(self, model_path: str):
         self._lock = threading.Lock()
 
-        print(f"OpenVINO initializing on device: {GLOBAL_OV_DEVICE}")
+        logger.info("OpenVINO initializing on device: %s", GLOBAL_OV_DEVICE)
 
         ov_model = _ov_core.read_model(model=model_path)
         self.compiled_model = _ov_core.compile_model(
@@ -340,29 +359,29 @@ def get_move():
             # Sort and log top 3 for debugging
             candidates.sort(key=lambda x: x[1], reverse=True)
             log_msg = f"AI thinking: " + ", ".join([f"Col {m}(V:{v}, Q:{q:.2f})" for m,v,q in candidates[:3]])
-            print(log_msg)
-            
+            logger.debug(log_msg)
+
             root_val = root.q_value
             # If position is contested/complex, boost the budget
             if abs(root_val) < 0.4:
                 simulations = min(2000, int(simulations * 1.5))
-                print(f"[Adaptive] Contested position (q={root_val:.2f}). Boosting sims to {simulations}")
+                logger.debug("[Adaptive] Contested position (q=%.2f). Boosting sims to %d", root_val, simulations)
             # If position is nearly decided, reduce the budget
             elif abs(root_val) > 0.85:
                 simulations = max(50, int(simulations * 0.5))
-                print(f"[Adaptive] Decided position (q={root_val:.2f}). Reducing sims to {simulations}")
+                logger.debug("[Adaptive] Decided position (q=%.2f). Reducing sims to %d", root_val, simulations)
         else:
-            print("[Adaptive] Tactical Short-Circuit detected. Bypassing simulation boost.")
+            logger.debug("[Adaptive] Tactical Short-Circuit detected. Bypassing simulation boost.")
 
     # Difficulty: random move chance (easy=2/3, medium=1/3, hard=0)
     random_chance = {"easy": 2/3, "medium": 1/3}.get(difficulty, 0)
     if random_chance > 0 and np.random.random() < random_chance:
         valid_cols = [c for c in range(7) if game.board[0][c] == 0]
         best_move = int(np.random.choice(valid_cols))
-        print(f"[Difficulty:{difficulty}] Random move → col {best_move}")
+        logger.debug("[Difficulty:%s] Random move → col %d", difficulty, best_move)
         return jsonify({"move": best_move, "probs": [0.0]*7, "winning_cells": []})
 
-    print(f"Evaluating board using {checkpoint_name} for player {current_player} (sims={simulations})...")
+    logger.debug("Evaluating board using %s for player %d (sims=%d)", checkpoint_name, current_player, simulations)
 
     start_time = time.time()
     mcts_probs = run_mcts_simulations(
@@ -385,7 +404,7 @@ def get_move():
         if book_entry and book_entry.get("count", 0) >= 5 and best_move == book_entry["avoid_move"]:
             for m in sorted(range(7), key=lambda m: mcts_probs[m], reverse=True):
                 if m != book_entry["avoid_move"] and game.board[0][m] == 0:
-                    print(f"[OpeningBook] col {best_move}→{m} (avoid_move seen {book_entry['count']}×)")
+                    logger.debug("[OpeningBook] col %d→%d (avoid_move seen %d×)", best_move, m, book_entry['count'])
                     best_move = int(m)
                     break
 
@@ -537,7 +556,7 @@ def assess_move():
                 quote = quote_match.group(1).split("\n")[0].strip().strip('"*#')
 
         except Exception as e:
-            print(f"Gemini Assessment Error: {e}")
+            logger.error("Gemini assessment error: %s", e)
             # Robust fallback to ensure the UI doesn't look empty/broken
             fallbacks = {
                 1: {"label": "Blunder", "quote": "Biological error detected. Tactical decay."},
@@ -721,6 +740,8 @@ def api_stats():
 
     try:
         ref = bigquery_tracker._table_ref
+        # Aggregates totals across all player IPs. 
+        # COALESCE handles cases where the table might be empty.
         row = next(iter(bigquery_tracker._client.query(f"""
             SELECT
                 COALESCE(SUM(total_games),  0) AS total_games,
@@ -736,7 +757,7 @@ def api_stats():
             "unique_players":  int(row.unique_players),
         }
     except Exception as e:
-        print(f"[api/stats] BQ query failed: {e}")
+        logger.error("[api/stats] BQ query failed: %s", e)
         return jsonify({"total_games": None})
 
     with _stats_cache_lock:
@@ -761,6 +782,7 @@ def api_recent_winner():
 
     try:
         ref = bigquery_tracker._win_table_ref
+        # Fetches the absolute latest entry from the hall-of-fame table.
         rows = list(bigquery_tracker._client.query(f"""
             SELECT name, difficulty, simulations, moves,
                    FORMAT_TIMESTAMP('%Y-%m-%d', recorded_at) AS date
@@ -782,7 +804,7 @@ def api_recent_winner():
                 }
             }
     except Exception as e:
-        print(f"[api/recent_winner] BQ query failed: {e}")
+        logger.error("[api/recent_winner] BQ query failed: %s", e)
         return jsonify({"winner": None})
 
     with _winner_cache_lock:
@@ -797,7 +819,10 @@ _leaderboard_cache_lock = threading.Lock()
 @app.route("/api/leaderboard")
 @limiter.limit("30 per minute")
 def api_leaderboard():
-    """Return the 5 most recent player wins, cached for 60 seconds."""
+    """
+    Returns the 5 most recent player wins, cached for 60 seconds.
+    This powers the 'Hall of Fame' scrolling list in the UI.
+    """
     now = time.time()
     with _leaderboard_cache_lock:
         if _leaderboard_cache["data"] and now < _leaderboard_cache["expires"]:
@@ -808,6 +833,7 @@ def api_leaderboard():
 
     try:
         ref = bigquery_tracker._win_table_ref
+        # Retrieves the 5 most recent victors for the Hall of Fame display.
         rows = list(bigquery_tracker._client.query(f"""
             SELECT name, difficulty, simulations, moves,
                    FORMAT_TIMESTAMP('%b %d %Y', recorded_at) AS date
@@ -826,7 +852,7 @@ def api_leaderboard():
             for r in rows
         ]}
     except Exception as e:
-        print(f"[api/leaderboard] BQ query failed: {e}")
+        logger.error("[api/leaderboard] BQ query failed: %s", e)
         return jsonify({"winners": []})
 
     with _leaderboard_cache_lock:
@@ -922,7 +948,7 @@ def welcome_strings():
                 _strings_cache[country] = translated
             return jsonify(_with_news(translated))
     except Exception as e:
-        print(f"[welcome_strings] Translation failed for {country!r}: {e}")
+        logger.warning("[welcome_strings] Translation failed for %r: %s", country, e)
 
     return jsonify(_with_news(_ENGLISH_STRINGS))
 
@@ -1097,7 +1123,7 @@ def set_security_headers(response):
 # Runs under Gunicorn (module import) and direct python app.py alike.
 _initial_models = sorted(glob.glob("*.onnx"), reverse=True)
 if _initial_models:
-    print(f"Pre-loading model: {_initial_models[0]}")
+    logger.info("Pre-loading model: %s", _initial_models[0])
     get_model(_initial_models[0])
 
 # Generate a fresh coffee-button tagline on each restart via Gemini.
@@ -1141,16 +1167,16 @@ def _gen_kofi_tagline():
         line = lines[0] if lines else resp.text.strip().splitlines()[0].strip()
         if line:
             _kofi_tagline = line
-            print(f"[App] Kofi tagline: {_kofi_tagline}")
+            logger.info("Kofi tagline: %s", _kofi_tagline)
     except Exception as exc:
-        print(f"[App] Kofi tagline generation failed (using fallback): {exc}")
+        logger.warning("Kofi tagline generation failed (using fallback): %s", exc)
 
 threading.Thread(target=_gen_kofi_tagline, daemon=True).start()
 
 # Startup check for stale background image — reuses _bg_update_state so the
 # admin "running" guard blocks concurrent manual triggers during boot.
 if background_manager.is_background_stale():
-    print("[App] Stale background detected, triggering update...")
+    logger.info("Stale background detected, triggering update...")
     def _safe_bg_update():
         _bg_update_state["running"] = True
         _bg_update_state["last_result"] = None
@@ -1158,7 +1184,7 @@ if background_manager.is_background_stale():
             ok = background_manager.update_background()
             _bg_update_state["last_result"] = "ok" if ok else "error"
         except Exception as e:
-            print(f"[App] Background update failed: {e}")
+            logger.error("Background update failed: %s", e)
             _bg_update_state["last_result"] = "error"
         finally:
             _bg_update_state["running"] = False
@@ -1167,8 +1193,8 @@ if background_manager.is_background_stale():
 if __name__ == "__main__":
     os.makedirs("templates", exist_ok=True)
     os.makedirs("static", exist_ok=True)
-    print("\nStarting Connect 4 AI Server...")
-    print(f"Device: {device}")
+    logger.info("Starting Connect 4 AI Server...")
+    logger.info("Device: %s", device)
     app_host = os.environ.get("APP_HOST", "127.0.0.1")
     app_port = int(os.environ.get("APP_PORT", 5000))
     app_debug = os.environ.get("FLASK_DEBUG", "False").lower() == "true"
