@@ -545,13 +545,22 @@ def assess_move():
                     f"Tone guide: 1-2 stars (mocking/cold), 3-4 stars (neutral/impressed), 5 stars (fascinated/alarmed). "
                     f"Use cyberpunk slang. Output ONLY the requested format."
                 )
-                response = gemini_client.models.generate_content(
-                    model="gemini-2.0-flash",
-                    contents=prompt,
-                    config=genai_types.GenerateContentConfig(
-                        http_options=genai_types.HttpOptions(timeout=15000)
-                    )
-                )
+                # Retry up to 3 times with exponential backoff on 429.
+                for _attempt in range(3):
+                    try:
+                        response = gemini_client.models.generate_content(
+                            model="gemini-2.0-flash",
+                            contents=prompt,
+                            config=genai_types.GenerateContentConfig(
+                                http_options=genai_types.HttpOptions(timeout=15000)
+                            )
+                        )
+                        break
+                    except Exception as _e:
+                        if "429" in str(_e) and _attempt < 2:
+                            time.sleep(2 ** _attempt)
+                        else:
+                            raise
                 responseText = response.text
 
                 label_match = re.search(r"LABEL:\s*(.*)", responseText, re.IGNORECASE)
