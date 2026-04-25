@@ -108,6 +108,18 @@ if _BOOK_PATH.exists():
 def _book_hash(board_arr: np.ndarray) -> str:
     return hashlib.sha256(board_arr.astype(np.int8).tobytes()).hexdigest()[:16]
 
+def _immediate_win_col(game, player) -> bool:
+    """Return True if player can win in one move from the current board state."""
+    for col in range(7):
+        if game.board[0][col] != 0:
+            continue
+        clone = game.clone()
+        clone.current_player = player
+        result = clone.play(col)
+        if result and clone.check_win(*result):
+            return True
+    return False
+
 # Single shared OpenVINO Core instance — creating ov.Core() is heavyweight
 # (scans hardware, loads plugins).  Re-using one instance avoids redundant
 # initialisation on every model load and when querying available devices.
@@ -373,13 +385,22 @@ def get_move():
         else:
             logger.debug("[Adaptive] Tactical Short-Circuit detected. Bypassing simulation boost.")
 
-    # Difficulty: random move chance (easy=2/3, medium=1/3, hard=0)
+    # Difficulty: random move chance (easy=2/3, medium=1/3, hard=0).
+    # Skip randomness when the position is immediately dangerous — AI must
+    # take a winning move or block a human win; a random column would be
+    # obviously wrong and frustrating at any difficulty level.
     random_chance = {"easy": 2/3, "medium": 1/3}.get(difficulty, 0)
     if random_chance > 0 and np.random.random() < random_chance:
-        valid_cols = [c for c in range(7) if game.board[0][c] == 0]
-        best_move = int(np.random.choice(valid_cols))
-        logger.debug("[Difficulty:%s] Random move → col %d", difficulty, best_move)
-        return jsonify({"move": best_move, "probs": [0.0]*7, "winning_cells": []})
+        human_player = -game.current_player
+        position_safe = (
+            not _immediate_win_col(game, game.current_player) and
+            not _immediate_win_col(game, human_player)
+        )
+        if position_safe:
+            valid_cols = [c for c in range(7) if game.board[0][c] == 0]
+            best_move = int(np.random.choice(valid_cols))
+            logger.debug("[Difficulty:%s] Random move → col %d", difficulty, best_move)
+            return jsonify({"move": best_move, "probs": [0.0]*7, "winning_cells": []})
 
     logger.debug("Evaluating board using %s for player %d (sims=%d)", checkpoint_name, current_player, simulations)
 
