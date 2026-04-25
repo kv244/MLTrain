@@ -1047,6 +1047,56 @@ def admin_dashboard(token):
 
 _bg_update_state = {"running": False, "last_result": None}  # guarded by GIL (single worker)
 
+_book_build_state = {"running": False, "last_result": None}
+
+@app.route("/api/admin/rebuild_opening_book", methods=["POST"])
+@limiter.limit("2 per minute")
+def rebuild_opening_book():
+    """Rebuild opening_book.json from human-win games in BigQuery.
+    Token is sent in the request body (not the URL) to keep it out of server logs."""
+    expected_token = os.environ.get("ADMIN_TOKEN")
+    data = request.get_json(silent=True) or {}
+    if not expected_token or data.get("token", "") != expected_token:
+        return jsonify({"error": "Unauthorized"}), 401
+
+    if _book_build_state["running"]:
+        return jsonify({"status": "running"}), 202
+
+    def _do_build():
+        import subprocess
+        _book_build_state["running"] = True
+        _book_build_state["last_result"] = None
+        try:
+            result = subprocess.run(
+                [".venv/bin/python", "build_opening_book.py", "--min-count", "2"],
+                cwd=str(MODELS_DIR),
+                capture_output=True,
+                text=True,
+                timeout=120,
+            )
+            if result.returncode == 0:
+                logger.info("Opening book rebuilt successfully:\n%s", result.stdout.strip())
+                # Reload the book into memory without restarting the server
+                global _opening_book
+                book_path = MODELS_DIR / "opening_book.json"
+                if book_path.exists():
+                    with open(book_path) as f:
+                        _opening_book = json.load(f)
+                    logger.info("Opening book reloaded: %d positions", len(_opening_book))
+                _book_build_state["last_result"] = "ok"
+            else:
+                logger.error("Opening book rebuild failed:\n%s", result.stderr.strip())
+                _book_build_state["last_result"] = "error"
+        except Exception as e:
+            logger.error("Opening book rebuild exception: %s", e)
+            _book_build_state["last_result"] = "error"
+        finally:
+            _book_build_state["running"] = False
+
+    threading.Thread(target=_do_build, daemon=True).start()
+    return jsonify({"status": "started"}), 202
+
+
 @app.route("/api/admin/refresh_background", methods=["POST"])
 @limiter.limit("2 per minute")
 def refresh_background():
