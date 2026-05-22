@@ -84,7 +84,7 @@
             <button id="btnHelp" class="btn-help" aria-label="How to play">?</button>
         </header>
 
-        <!-- Sidebar / Top controls -->
+        <!-- Settings Panel -->
         <div class="control-panel">
             <div class="control-group">
                 <button id="btnToggleAudio" class="btn-icon">
@@ -120,43 +120,9 @@
                 <button id="btnPlayerFirst" class="btn primary-btn">You Play First</button>
                 <button id="btnAiFirst" class="btn secondary-btn">AI Plays First</button>
              </div>
-
-             <!-- In-Game Actions -->
-             <div class="action-buttons mt-mid" id="ingameActions">
-                <button id="btnHint" class="btn outline-btn" disabled>Get Hint</button>
-                <button id="btnUndo" class="btn outline-btn" disabled>Undo Move</button>
-             </div>
-
-             <!-- Leaderboard -->
-             <div class="action-buttons mt-mid">
-                <button id="btnLeaderboard" class="btn outline-btn">🏆 Leaderboard</button>
-             </div>
-
-             <!-- Stats Panel -->
-             <div class="stats-panel">
-                <h3 class="stats-title">Session Stats</h3>
-                <div class="stats-grid">
-                    <div class="stat-item">
-                        <span class="stat-label">Hardware:</span>
-                        <span id="hardwareBadge" class="stat-value highlight">...</span>
-                    </div>
-                    <div class="stat-item">
-                        <span class="stat-label">Total Games:</span>
-                        <span id="statGames" class="stat-value">0</span>
-                    </div>
-                    <div class="stat-item">
-                        <span class="stat-label stat-color-p1">Your Wins:</span>
-                        <span id="statPlayerWins" class="stat-value">0</span>
-                    </div>
-                    <div class="stat-item">
-                        <span class="stat-label stat-color-p2">AI Wins:</span>
-                        <span id="statAiWins" class="stat-value">0</span>
-                    </div>
-                </div>
-             </div>
         </div>
 
-        <!-- Main Game Area -->
+        <!-- Main Game Area — placed immediately after settings so it's visible without scrolling -->
         <main class="board-container hidden" id="boardArea">
             <div class="status-bar" id="statusBar">
                 <h2>Choose a column to play!</h2>
@@ -195,6 +161,45 @@
                 </button>
             </div>
         </main>
+
+        <!-- Secondary Controls (in-game actions + stats) -->
+        <div class="control-panel control-panel-secondary">
+             <!-- In-Game Actions -->
+             <div class="action-buttons" id="ingameActions">
+                <button id="btnHint" class="btn outline-btn" disabled>Get Hint</button>
+                <button id="btnUndo" class="btn outline-btn" disabled>Undo Move</button>
+             </div>
+
+             <!-- Leaderboard -->
+             <div class="action-buttons mt-mid">
+                <button id="btnLeaderboard" class="btn outline-btn">🏆 Leaderboard</button>
+             </div>
+
+             <!-- Stats Panel -->
+             <div class="stats-panel">
+                <h3 class="stats-title">Session Stats</h3>
+                <div class="stats-grid">
+                    <div class="stat-item">
+                        <span class="stat-label">Hardware:</span>
+                        <span id="hardwareBadge" class="stat-value highlight">...</span>
+                    </div>
+                    <div class="stat-item">
+                        <span class="stat-label">Total Games:</span>
+                        <span id="statGames" class="stat-value">0</span>
+                    </div>
+                    <div class="stat-item">
+                        <span class="stat-label stat-color-p1">Your Wins:</span>
+                        <span id="statPlayerWins" class="stat-value">0</span>
+                    </div>
+                    <div class="stat-item">
+                        <span class="stat-label stat-color-p2">AI Wins:</span>
+                        <span id="statAiWins" class="stat-value">0</span>
+                    </div>
+                </div>
+             </div>
+        </div>
+
+
 
     </div>
 
