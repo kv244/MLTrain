@@ -9,6 +9,9 @@ env:
   SYSTEMD_SERVICE: ${{ vars.SYSTEMD_SERVICE || 'connect4' }}
   GCS_MODEL_URI: ${{ secrets.GCS_MODEL_URI }} # e.g. gs://your-bucket/model.onnx
 
+permissions:
+  contents: write
+
 jobs:
   deploy:
     runs-on: ubuntu-latest
@@ -85,3 +88,41 @@ jobs:
           ssh ${{ secrets.GCP_VM_USER }}@${{ secrets.GCP_VM_HOST }} \
             "gsutil cp ${{ env.GCS_MODEL_URI }} ${{ env.TARGET_DIR }}/model.onnx && \
              gsutil cp ${{ env.GCS_MODEL_URI }}.data ${{ env.TARGET_DIR }}/model.onnx.data"
+
+      - name: Extract Latest Version and Notes
+        id: extract_release
+        run: |
+          python -c "
+          import re
+          with open('README.md', encoding='utf-8') as f:
+              content = f.read()
+          matches = list(re.finditer(r'### \[(v[0-9]+\.[0-9]+\.[0-9]+)\]', content))
+          if matches:
+              tag = matches[0].group(1)
+              start = matches[0].end()
+              end = matches[1].start() if len(matches) > 1 else len(content)
+              notes = content[start:end].strip()
+              with open('tag_name.txt', 'w') as f:
+                  f.write(tag)
+              with open('release_notes.txt', 'w') as f:
+                  f.write(notes)
+              print(f'Extracted tag: {tag}')
+          else:
+              print('No version tag found in README.md')
+          "
+
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if [ -f tag_name.txt ]; then
+            TAG=$(cat tag_name.txt)
+            if gh release view "$TAG" >/dev/null 2>&1; then
+              echo "Release $TAG already exists. Skipping."
+            else
+              echo "Creating release $TAG..."
+              gh release create "$TAG" --title "$TAG" --notes-file release_notes.txt
+            fi
+          else
+            echo "Skipping release creation: tag_name.txt not found."
+          fi
