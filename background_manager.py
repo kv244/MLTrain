@@ -24,13 +24,8 @@ def is_background_stale(days=7):
     return age >= days
 
 def update_background():
-    """Generates a new background using Gemini + Vertex AI Imagen (via unified genai SDK)."""
-    PROJECT_ID    = os.environ.get("GCP_PROJECT_ID")
+    """Generates a new background using Gemini + Imagen 4.0 (via unified genai SDK)."""
     GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
-
-    if not PROJECT_ID:
-        logger.error("GCP_PROJECT_ID not set")
-        return False
 
     if not GEMINI_API_KEY:
         logger.error("GEMINI_API_KEY not set in environment")
@@ -49,23 +44,16 @@ def update_background():
             "and a clean, wide-angle perspective. Output ONLY the image prompt text."
         )
         response = client.models.generate_content(
-            model="gemini-2.0-flash",
+            model="gemini-2.5-flash",
             contents=system_prompt
         )
         image_prompt = response.text.strip()
         logger.debug("Gemini prompt: %s", image_prompt)
 
-        # 2. Generate Image via Vertex AI Imagen (using Vertex AI backend via genai SDK)
-        # Note: vertexai=True uses the Vertex AI backend for this client.
-        vertex_client = genai.Client(
-            vertexai=True,
-            project=PROJECT_ID,
-            location=LOCATION
-        )
-        
-        logger.info("Requesting image from Vertex AI Imagen (v3)...")
-        res_image = vertex_client.models.generate_images(
-            model="imagen-3.0-generate-001",
+        # 2. Generate Image via Imagen 4.0 (using standard Google AI backend)
+        logger.info("Requesting image from Imagen 4.0...")
+        res_image = client.models.generate_images(
+            model="imagen-4.0-generate-001",
             prompt=image_prompt,
             config=types.GenerateImagesConfig(
                 number_of_images=1,

@@ -59,7 +59,7 @@ body::after {
     background: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.15) 50%), linear-gradient(90deg, rgba(255, 0, 0, 0.03), rgba(0, 255, 0, 0.01), rgba(0, 0, 255, 0.03));
     background-size: 100% 3px, 3px 100%;
     pointer-events: none;
-    z-index: 1000;
+    z-index: 1;
 }
 
 .app-container {
@@ -73,6 +73,8 @@ body::after {
     box-shadow: 0 0 20px var(--ui-glow), inset 0 0 10px var(--ui-glow);
     transition: box-shadow 0.8s ease;
     animation: ambient-pulse 5s infinite alternate ease-in-out;
+    position: relative;
+    z-index: 10;
 }
 
 @keyframes ambient-pulse {
@@ -1115,6 +1117,8 @@ For now, two prominent corners are very Manga-style. */
     border: 1px solid rgba(0, 229, 255, 0.07);
     border-radius: 16px;
     backdrop-filter: blur(6px);
+    position: relative;
+    z-index: 10;
 }
 .seo-footer-inner {
     display: grid;
@@ -1122,29 +1126,34 @@ For now, two prominent corners are very Manga-style. */
     gap: 2rem;
 }
 .seo-footer h2 {
-    font-size: 0.9rem;
+    font-size: 1.05rem;
     font-weight: 700;
-    color: rgba(0, 229, 255, 0.6);
+    color: var(--neon-cyan);
+    text-shadow: 0 0 8px rgba(0, 229, 255, 0.3);
     text-transform: uppercase;
-    letter-spacing: 0.06em;
+    letter-spacing: 0.08em;
     margin-bottom: 0.75rem;
-    border-bottom: 1px solid rgba(0, 229, 255, 0.1);
+    border-bottom: 1px solid rgba(0, 229, 255, 0.2);
     padding-bottom: 0.4rem;
 }
 .seo-footer h3 {
-    font-size: 0.8rem;
+    font-size: 0.95rem;
     font-weight: 600;
-    color: #8b949e;
-    margin: 0.9rem 0 0.3rem;
+    color: var(--neon-magenta);
+    text-shadow: 0 0 8px rgba(255, 0, 255, 0.2);
+    margin: 1.2rem 0 0.4rem;
 }
 .seo-footer p {
-    font-size: 0.8rem;
-    color: #4b5563;
+    font-size: 0.85rem;
+    color: var(--text-color);
     line-height: 1.7;
     margin-bottom: 0.5rem;
 }
 .seo-footer p:last-child { margin-bottom: 0; }
-.seo-footer strong { color: #6b7280; }
+.seo-footer strong {
+    color: var(--neon-lime);
+    font-weight: 600;
+}
 
 /* Hide SEO footer on touch/mobile devices — game UI takes priority */
 @media (max-width: 900px) {

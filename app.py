@@ -570,7 +570,7 @@ def assess_move():
                 for _attempt in range(3):
                     try:
                         response = gemini_client.models.generate_content(
-                            model="gemini-2.0-flash",
+                            model="gemini-2.5-flash",
                             contents=prompt,
                             config=genai_types.GenerateContentConfig(
                                 http_options=genai_types.HttpOptions(timeout=15000)
@@ -975,7 +975,7 @@ def welcome_strings():
             f"{json.dumps(_ENGLISH_STRINGS, ensure_ascii=False)}"
         )
         response = gemini_client.models.generate_content(
-            model="gemini-2.0-flash",
+            model="gemini-2.5-flash",
             contents=prompt,
             config=genai_types.GenerateContentConfig(
                 http_options=genai_types.HttpOptions(timeout=15000)
@@ -1245,7 +1245,7 @@ def _gen_kofi_tagline():
         return
     try:
         resp = gemini_client.models.generate_content(
-            model="gemini-2.0-flash",
+            model="gemini-2.5-flash",
             contents=(
                 "Output ONLY a single short witty line (max 10 words, no quotes, no preamble) "
                 "inviting someone to buy the developer a coffee after beating a Connect 4 AI. "
