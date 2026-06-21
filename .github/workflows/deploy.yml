@@ -56,6 +56,9 @@ jobs:
             # Source code backup disabled — git is source of truth, disk is too small
             # Venv backup disabled — too large (~2.1G) for the 10G disk; venv rebuilds from requirements.txt
 
+            # Discard any local modifications to the dynamically generated background image
+            # to avoid merge conflicts during deployment.
+            git checkout -- static/cyberpunk_bg.png || true
             git pull origin main
 
             python3 -m venv .venv --system-site-packages 2>/dev/null || true
