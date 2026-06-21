@@ -350,10 +350,17 @@ Set a threshold (e.g. $20/month) — GCP will email you before you're surprised.
 - [x] **Real-time Analytics:** BigQuery player analytics implemented — tracks visits, games, win/loss, moves per IP. Admin dashboard at `/admin/<token>`.
 - [x] **Global Player Map:** Geo-IP welcome message now done browser-side (geolocation-db.com whitelisted in CSP) so the client's real IP is used. Includes wallpaper renewal countdown.
 - [x] **Database Integration:** BigQuery replaces the CSV-only telemetry system for structured per-player analytics.
-- [x] **Dynamic Environment:** Successfully implemented via `background_manager.py`. The system automatically generates and rotates high-fidelity cyberpunk backgrounds using the Gemini API and Vertex AI Imagen once a week, keeping the UI fresh and modern.
+- [x] **Dynamic Environment:** Successfully implemented via `background_manager.py`. The system automatically generates and rotates high-fidelity cyberpunk backgrounds using the Gemini API and Imagen 4.0 once a week, keeping the UI fresh and modern.
 - [x] **Root Cause Analysis (RCA):** Completed detailed analysis of the April 2026 deployment outages.
 
 ## Version History
+
+### [v2.2.1] - 2026-06-21
+
+#### Web App & AI Updates
+
+- **Fix Instructions Readability** (`style.css`): Adjusted the scanlines overlay (`body::after`) `z-index` to sit behind content panels (`.app-container`, `.seo-footer`), allowing the panels' native backdrop blur to keep typography crisp. Upgraded `.seo-footer` paragraph, header, and strong text colors to high-contrast cyberpunk neon themes (light gray, neon cyan, neon magenta, and neon lime).
+- **Gemini & Imagen 4.0 Upgrades** (`background_manager.py`, `app.py`): Migrated prompt generation and translations from the deprecated `gemini-2.0-flash` to the active `gemini-2.5-flash` model. Restructured the weekly background generation script to use `imagen-4.0-generate-001` via the standard `genai.Client` API key backend, completely eliminating the need for Vertex AI libraries and GCP default credentials (ADC) on local dev environments.
 
 ### [v2.2.0] - 2026-04-25
 
