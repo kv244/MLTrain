@@ -360,16 +360,21 @@ Set a threshold (e.g. $20/month) — GCP will email you before you're surprised.
 - [x] **Root Cause Analysis (RCA):** Completed detailed analysis of the April 2026 deployment outages.
 
 #### Planned (see [PLAN.md](PLAN.md) for phases and acceptance criteria)
-- [ ] **Easy-mode auto-hint cap:** Limit the auto-hint to ~50 sims, or compute it only on "Get Hint" (it currently runs a full `/api/move` every turn).
+- [x] **Easy-mode auto-hint cap:** Limit the auto-hint to ~50 sims, or compute it only on "Get Hint" (it currently runs a full `/api/move` every turn).
 - [ ] **Abort stale server work:** Request IDs / deadlines so `/api/assess` and `/api/move` are dropped after undo or restart.
 - [ ] **Concurrency:** Evaluate `--workers 2` or `--threads 2` (check VM RAM; each worker loads its own model copy).
 - [ ] **Position cache:** Cache ratings and move probabilities by board hash (openings repeat constantly).
 - [ ] **UI polish:** Collapse the empty ratings gap on phones, scroll to the board after "AI Plays First" and restart, show a "rating…" indicator.
 - [ ] **Disk monitoring:** Confirm the weekly apt cron (first run Sun 2026-11-15) and print free space in the deploy summary.
 - [ ] **Model health check:** Fail the deploy if `/api/models` returns an empty list.
-- [ ] **CI smoke test:** Headless Chromium phone-viewport test (tap Start, assert board in view) on every PR.
+- [x] **CI smoke test:** Headless Chromium phone-viewport test (tap Start, assert board in view) on every PR.
 
 ## Version History
+
+### [Unreleased]
+
+- **Web App:** Easy-mode auto-hint now uses a light 50-sim search (the Get Hint button still uses full Think Intensity), halving server work per turn.
+- **CI:** New `UI Smoke Test` workflow (`tests/smoke_ui.py`, stub server in `tests/stub_server.py`) runs headless Chromium at phone size on every PR: checks the board scrolls into view after Start and that the easy auto-hint stays light.
 
 ### [v2.2.2] - 2026-11-11
 
