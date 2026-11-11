@@ -359,6 +359,16 @@ Set a threshold (e.g. $20/month) — GCP will email you before you're surprised.
 - [x] **Dynamic Environment:** Successfully implemented via `background_manager.py`. The system automatically generates and rotates high-fidelity cyberpunk backgrounds using the Gemini API and Imagen 4.0 once a week, keeping the UI fresh and modern.
 - [x] **Root Cause Analysis (RCA):** Completed detailed analysis of the April 2026 deployment outages.
 
+#### Planned (see [PLAN.md](PLAN.md) for phases and acceptance criteria)
+- [ ] **Easy-mode auto-hint cap:** Limit the auto-hint to ~50 sims, or compute it only on "Get Hint" (it currently runs a full `/api/move` every turn).
+- [ ] **Abort stale server work:** Request IDs / deadlines so `/api/assess` and `/api/move` are dropped after undo or restart.
+- [ ] **Concurrency:** Evaluate `--workers 2` or `--threads 2` (check VM RAM; each worker loads its own model copy).
+- [ ] **Position cache:** Cache ratings and move probabilities by board hash (openings repeat constantly).
+- [ ] **UI polish:** Collapse the empty ratings gap on phones, scroll to the board after "AI Plays First" and restart, show a "rating…" indicator.
+- [ ] **Disk monitoring:** Confirm the weekly apt cron (first run Sun 2026-11-15) and print free space in the deploy summary.
+- [ ] **Model health check:** Fail the deploy if `/api/models` returns an empty list.
+- [ ] **CI smoke test:** Headless Chromium phone-viewport test (tap Start, assert board in view) on every PR.
+
 ## Version History
 
 ### [v2.2.2] - 2026-11-11
