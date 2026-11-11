@@ -45,6 +45,16 @@ jobs:
             # ── Pre-deploy Disk Cleanup ──
             rm -rf ~/.cache/pip || true
             sudo journalctl --vacuum-time=1d || true
+            # apt keeps every downloaded .deb; weekly Ops Agent / gcloud auto-upgrades
+            # add ~100MB each (3.3GB had piled up on this VM). It is only a cache.
+            sudo apt-get clean || true
+
+            # Old deploy backups: report what exists, then keep only the newest tarball.
+            if ls ~/backups/mltrain_backup_*.tar.gz >/dev/null 2>&1; then
+              echo "Deploy backups found:"; ls -lh ~/backups/mltrain_backup_*.tar.gz
+            else
+              echo "No deploy backups found in ~/backups"
+            fi
             ls -t ~/backups/mltrain_backup_*.tar.gz 2>/dev/null | tail -n +2 | xargs rm -f || true
 
             # Verify space before backup attempt
