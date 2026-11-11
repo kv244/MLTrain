@@ -223,6 +223,9 @@ function startGame(human_role) {
     WinEffects.reset();
     
     _boardArea.classList.remove('hidden');
+    // On phones the settings panel fills the first screen, so the board is created
+    // below the fold and nothing seems to happen. Scroll it into view.
+    _boardArea.scrollIntoView({ behavior: 'smooth', block: 'start' });
     _btnReset.classList.add('hidden');
     _board.classList.remove('disabled');
     _difficultySelect.disabled = true;
