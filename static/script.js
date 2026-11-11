@@ -39,6 +39,18 @@ const DIFF_DESC = {
 let _hintAbortController = null;
 let _hintTimerId = null;
 
+// Move ratings run in the background. The token is bumped on every new game,
+// human move and undo, so a rating that arrives late for an older position is dropped.
+let _assessToken = 0;
+// A star rating only needs a rough visit-count ratio, not full playing strength,
+// so it is capped well below the Think Intensity slider.
+const ASSESS_MAX_SIMS = 200;
+
+function ratingsEnabled() {
+    const el = document.getElementById('ratingsToggle');
+    return !el || el.checked;
+}
+
 function getSimCount() {
     const v = parseInt(document.getElementById('simsSlider').value);
     return isNaN(v) ? 400 : v;
@@ -86,6 +98,19 @@ document.addEventListener("DOMContentLoaded", () => {
     if (_simsSlider && _simsLabel) {
         _simsSlider.addEventListener('input', () => {
             _simsLabel.innerText = _simsSlider.value;
+        });
+    }
+
+    // Move ratings on/off (remembered between visits)
+    const _ratingsToggle = document.getElementById('ratingsToggle');
+    if (_ratingsToggle) {
+        _ratingsToggle.checked = localStorage.getItem('c4_ratings') !== 'off';
+        _ratingsToggle.addEventListener('change', () => {
+            localStorage.setItem('c4_ratings', _ratingsToggle.checked ? 'on' : 'off');
+            if (!_ratingsToggle.checked) {
+                _assessToken++;      // discard any rating still in flight
+                clearAssessment();
+            }
         });
     }
 
@@ -184,7 +209,8 @@ function startGame(human_role) {
     gameOver = false;
     moveCount = 0;
     moveSequence = [];
-    
+    _assessToken++;   // drop any rating still in flight from the previous game
+
     initBoard();
 
     // Pick a random inner-ring style for this game
@@ -265,32 +291,35 @@ async function handleColumnClick(c) {
 
     playMove(r, c, humanPlayer);
 
-    // FETCH ASSESSMENT (Sequential to avoid server crash)
-    const assessment = await fetchAssessment(boardBefore, c, humanPlayer);
+    // Rate the move in the background. This used to be awaited here, so every
+    // human move paid for a second full MCTS search (plus a possible Gemini call)
+    // before the AI had even started thinking.
+    const token = ++_assessToken;
+    const rateThisMove = () => {
+        if (ratingsEnabled()) fetchAssessment(boardBefore, c, humanPlayer, token);
+    };
 
-    // Step 1.4: Use server-provided winning cells if available
-    if (assessment && assessment.winning_cells && assessment.winning_cells.length > 0) {
-        endGame("You Win!", assessment.winning_cells);
-        return;
-    }
-
-    // Local fallback check
     const winningLine = checkWinResult(r, c, humanPlayer);
     if (winningLine) {
         endGame("You Win!", winningLine);
+        rateThisMove();
         return;
     } else if (isDraw()) {
         endGame("It's a Draw!");
+        rateThisMove();
         return;
     }
 
     currentPlayer *= -1;
     updateTurnUI();
-    triggerAiMove();
+    await triggerAiMove();
+    // Sent only after the AI has replied, so the server is free while the human thinks
+    // and the rating never sits in front of the AI's search on the single worker.
+    rateThisMove();
 }
 
-async function fetchAssessment(prevBoard, move, movingPlayer) {
-    const sims = getSimCount();
+async function fetchAssessment(prevBoard, move, movingPlayer, token) {
+    const sims = Math.min(getSimCount(), ASSESS_MAX_SIMS);
     if (!sims) return null;
 
     try {
@@ -313,6 +342,8 @@ async function fetchAssessment(prevBoard, move, movingPlayer) {
         }
 
         const data = await res.json();
+        // Drop the rating if the game restarted, the move was undone or the human has moved again.
+        if (token !== _assessToken) return data;
         if (data.score) {
             showAssessment(data);
         }
@@ -585,7 +616,8 @@ function undoMove() {
     // Pop the state from BEFORE AI's move AND the state from BEFORE player's move
     boardHistory.pop(); // AI state
     const previousState = boardHistory.pop();
-    
+    _assessToken++;     // the rated move no longer exists
+
     board = previousState;
     moveCount = Math.max(0, moveCount - 2); // Undo both player and AI move
     moveSequence.splice(moveCount); // Keep in sync with moveCount
