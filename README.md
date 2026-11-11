@@ -160,7 +160,7 @@ After=network.target
 [Service]
 User=<VM_USER>
 WorkingDirectory=/home/<VM_USER>/mltrain
-ExecStart=/home/<VM_USER>/mltrain/.venv/bin/gunicorn --workers 1 --bind 127.0.0.1:5000 --timeout 120 --graceful-timeout 60 app:app
+ExecStart=/home/<VM_USER>/mltrain/.venv/bin/gunicorn --workers 1 --worker-class gthread --threads 4 --bind 127.0.0.1:5000 --timeout 120 --graceful-timeout 60 app:app
 Restart=always
 
 [Install]
@@ -174,6 +174,8 @@ sudo systemctl start connect4
 ```
 
 > **Important — keep `--workers 1`**: `_bg_update_state` (admin background regeneration status) and the flask-limiter rate counters are stored in process memory. With `--workers 2+`, each worker has its own independent copy — a POST to worker A sets state that worker B never sees, causing the admin UI to show "Generation failed" even when the image generated successfully. If traffic grows enough to need multiple workers, migrate both to Redis (`LIMITER_STORAGE_URI`) before bumping the worker count.
+
+> **Threads are fine, extra workers are not**: `--threads 4` lets a cancel or a new request be handled while a search runs (the app serialises searches itself with a lock, since 2 shared vCPUs cannot run two at once). Measured on the e2-medium VM: a move behind a cancelled rating dropped from ~9–18 s to ~3–6 s, worker RSS grew only ~10 MB (419 → 429 MB). The app also works unchanged under the plain sync worker.
 
 > **Note:** The service uses the full venv path for `ExecStart` — systemd does not source `activate`. Ubuntu's system-managed Python requires a venv; the venv only needs to be created once on the VM.
 
@@ -361,9 +363,9 @@ Set a threshold (e.g. $20/month) — GCP will email you before you're surprised.
 
 #### Planned (see [PLAN.md](PLAN.md) for phases and acceptance criteria)
 - [x] **Easy-mode auto-hint cap:** Limit the auto-hint to ~50 sims, or compute it only on "Get Hint" (it currently runs a full `/api/move` every turn).
-- [ ] **Abort stale server work:** Request IDs / deadlines so `/api/assess` and `/api/move` are dropped after undo or restart.
-- [ ] **Concurrency:** Evaluate `--workers 2` or `--threads 2` (check VM RAM; each worker loads its own model copy).
-- [ ] **Position cache:** Cache ratings and move probabilities by board hash (openings repeat constantly).
+- [x] **Abort stale server work:** Request IDs / epochs plus `/api/cancel`; superseded `/api/assess` and `/api/move` searches are aborted after undo or restart.
+- [x] **Concurrency:** Evaluated on the VM: keep one worker, add `--worker-class gthread --threads 4` (one search runs at a time; waiting ones are dropped when stale). See the systemd note.
+- [x] **Position cache:** Cache ratings and move probabilities by board hash (openings repeat constantly).
 - [ ] **UI polish:** Collapse the empty ratings gap on phones, scroll to the board after "AI Plays First" and restart, show a "rating…" indicator.
 - [ ] **Disk monitoring:** Confirm the weekly apt cron (first run Sun 2026-11-15) and print free space in the deploy summary.
 - [ ] **Model health check:** Fail the deploy if `/api/models` returns an empty list.
@@ -373,6 +375,10 @@ Set a threshold (e.g. $20/month) — GCP will email you before you're surprised.
 
 ### [Unreleased]
 
+- **Stale-work cancellation** (`app.py`, `search_control.py`, `mcts.py`, `script.js`): requests carry a client id, kind and increasing epoch; newer requests and `/api/cancel` mark older ones stale, and running MCTS searches poll a `cancel_check` and abort (`{"stale": true}`). Late AI replies from a previous game are ignored.
+- **Search cache** (`search_control.py`): LRU of 4096 move/assess results keyed by checkpoint, board, player and sims; responses include `cached`.
+- **One search at a time** (`app.py`): a lock serialises searches (concurrent ones only slow each other on 2 vCPUs); queued stale searches are dropped. Random easy/medium moves skip the search entirely. Recommended gunicorn setting: `--workers 1 --worker-class gthread --threads 4`.
+- **Tests:** `tests/test_search_control.py`, `tests/test_mcts_cancel.py`, `tests/bench_concurrency.py` (run against a live server), more UI smoke checks.
 - **Web App:** Easy-mode auto-hint now uses a light 50-sim search (the Get Hint button still uses full Think Intensity), halving server work per turn.
 - **CI:** New `UI Smoke Test` workflow (`tests/smoke_ui.py`, stub server in `tests/stub_server.py`) runs headless Chromium at phone size on every PR: checks the board scrolls into view after Start and that the easy auto-hint stays light.
 
