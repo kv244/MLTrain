@@ -6,9 +6,9 @@ Status: proposed (2026-11-11). Items map to the "Planned" list in the README roa
 | # | Item | Change | Done when |
 |---|------|--------|-----------|
 | 1 | Auto-hint cap (DONE) | `static/script.js` / `app.py`: limit easy-mode hint to ~50 sims, or only compute on "Get Hint" | Easy mode makes one heavy request per turn, not two |
-| 2 | Abort stale work | Client sends a request ID; server skips/aborts `/api/assess` and `/api/move` for superseded IDs (after undo/restart) | Restart mid-rating leaves no queued CPU work |
-| 3 | Concurrency | Test `--workers 2` vs `--threads 2` on the VM; check RAM first | A rating no longer delays a move; memory stays under limit |
-| 4 | Position cache | LRU cache keyed by (board hash, player, sims bucket) for assess and move probs | Repeat openings answer in <50 ms |
+| 2 | Abort stale work (DONE) | Client sends a request ID; server skips/aborts `/api/assess` and `/api/move` for superseded IDs (after undo/restart) | Restart mid-rating leaves no queued CPU work |
+| 3 | Concurrency (DONE: 1 worker, `--threads 4`, search lock) | Test `--workers 2` vs `--threads 2` on the VM; check RAM first | A rating no longer delays a move; memory stays under limit |
+| 4 | Position cache (DONE) | LRU cache keyed by (board hash, player, sims bucket) for assess and move probs | Repeat openings answer in <50 ms |
 
 ## Phase 2: UI polish
 | # | Item | Done when |
