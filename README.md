@@ -214,6 +214,12 @@ This usually means the SSH key in GitHub Secrets does not match the `authorized_
 2.  **Verify the Key**: Ensure the private key in `GCP_SSH_PRIVATE_KEY` matches the public key in `~/.ssh/authorized_keys` on the VM.
 3.  **Rotate the key** if needed — see _Setting up the SSH key_ above. Never commit private keys to the repository; `id_*` and `*.pem` are blocked by `.gitignore`.
 
+#### ❌ Error: Insufficient disk space for deployment
+The deploy aborts, before changing anything, when `/` has less than 500 MB free.
+1.  **Check usage** on the VM: `df -h /` and `sudo du -xm --max-depth=1 / | sort -n | tail`.
+2.  **Usual culprit:** `/var/cache/apt` (old `.deb` files from automatic Ops Agent / gcloud upgrades, ~100 MB each; 3.3 GB had piled up in Nov 2026). `sudo apt-get clean` is safe. The deploy now does this itself, and a weekly cron job on the VM (`/etc/cron.d/apt-clean-weekly`, Sundays 05:00 UTC) repeats it.
+3.  **Backups:** deploy source/venv backups are disabled (see v2.2.0), so there is normally nothing to prune. `/var/backups` is system package state - do not delete it.
+
 #### ❌ Error: 502 Bad Gateway
 This means the Gunicorn/Flask app failed to start.
 1.  **Missing Dependencies**: Run `sudo journalctl -u connect4 -n 50` on the VM. If you see `ModuleNotFoundError: No module named 'PIL'`, ensure `Pillow` is in your `requirements.txt`.
@@ -354,6 +360,17 @@ Set a threshold (e.g. $20/month) — GCP will email you before you're surprised.
 - [x] **Root Cause Analysis (RCA):** Completed detailed analysis of the April 2026 deployment outages.
 
 ## Version History
+
+### [v2.2.2] - 2026-11-11
+
+#### Web App
+
+- **Non-blocking move ratings** (`script.js`, `index.html`): Every human move used to wait for `/api/assess` (a second full MCTS search plus a possible Gemini call) before the AI's reply was even requested, roughly doubling reply time on the single Gunicorn worker. The AI now moves first; the rating is requested once it has replied, with its search capped at 200 simulations (`ASSESS_MAX_SIMS`). A rating that arrives late for an older position (new game, undo, next move) is dropped. Win/draw detection uses the existing local check. A new **Rate my moves** checkbox (remembered in `localStorage`) turns ratings off entirely.
+
+#### Deploy
+
+- **Disk cleanup** (`deploy.yml`): The pre-deploy cleanup now runs `apt-get clean` and logs any deploy backups before pruning to the newest. A deploy had aborted at the 500 MB free-space check: `/var/cache/apt` held 3.3 GB of old `.deb` files; no deploy backups existed on the VM.
+- **Weekly apt cache cleanup (VM only)**: `/etc/cron.d/apt-clean-weekly` runs `apt-get clean` every Sunday 05:00 UTC. It lives on the VM, not in this repo - recreate it if the VM is rebuilt.
 
 ### [v2.2.1] - 2026-06-21
 
