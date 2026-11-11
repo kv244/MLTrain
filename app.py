@@ -54,7 +54,8 @@ def _git_rev() -> str:
 
 VERSION = _git_rev()
 
-from mcts import Connect4, run_mcts_simulations
+from mcts import Connect4, run_mcts_simulations, SearchCancelled
+from search_control import RequestRegistry, SearchCache, KINDS, valid_client_id
 import background_manager
 import bigquery_tracker
 
@@ -297,6 +298,40 @@ def list_models():
     models.sort(reverse=True)
     return jsonify({"models": models})
 
+# ── Stale-request cancellation + search cache (see search_control.py) ──
+_requests = RequestRegistry()
+_search_cache = SearchCache()
+
+
+def _request_ref(data, default_kind):
+    """Pull (client_id, kind, epoch) out of a request body, or None if the client
+    did not send valid cancellation info (older cached page -> no cancellation)."""
+    client_id = data.get("client_id")
+    kind = data.get("kind", default_kind)
+    epoch = data.get("epoch")
+    if not valid_client_id(client_id) or kind not in KINDS:
+        return None
+    if isinstance(epoch, bool) or not isinstance(epoch, int) or epoch < 0:
+        return None
+    return client_id, kind, epoch
+
+
+@app.route("/api/cancel", methods=["POST"])
+@limiter.limit("120 per minute")
+def cancel_requests():
+    """Cancel in-flight / queued searches for this client (game restart, undo, next move).
+    Body: { "client_id": "<id>", "upto": { "<kind>": <epoch>, ... } }"""
+    data = request.json or {}
+    client_id = data.get("client_id")
+    upto = data.get("upto")
+    if not valid_client_id(client_id) or not isinstance(upto, dict):
+        return jsonify({"error": "Invalid cancel request"}), 400
+    for kind, epoch in upto.items():
+        if kind in KINDS and isinstance(epoch, int) and not isinstance(epoch, bool) and epoch >= 0:
+            _requests.cancel(client_id, kind, epoch)
+    return jsonify({"ok": True})
+
+
 @app.route("/api/move", methods=["POST"])
 # Default limit is inherited from default_limits, allowing environment injection globally
 def get_move():
@@ -320,6 +355,14 @@ def get_move():
         simulations = max(1, min(int(data.get("simulations", 800)), 2000))
     except (TypeError, ValueError):
         return jsonify({"error": "Invalid simulations value"}), 400
+
+    # Stale-request handling: skip work the client has already moved on from.
+    ref = _request_ref(data, "move")
+    cancel_check = None
+    if ref:
+        if _requests.register(*ref):
+            return jsonify({"stale": True})
+        cancel_check = lambda: _requests.is_stale(*ref)  # noqa: E731
 
     checkpoint = _resolve_checkpoint(checkpoint_name)
     if not checkpoint:
@@ -348,47 +391,11 @@ def get_move():
     # Numpy arrays from lists will be [6, 7], Python expects [r][c].
     game.current_player = current_player
 
-    # ── Step 6: Dynamic Simulation Budget ──
-    if simulations >= 200:
-        # Run a fast 50-sim pass to estimate position complexity
-        _, root = run_mcts_simulations(
-            game, model, device,
-            num_sims=50,
-            temperature=0,
-            add_dirichlet_noise=False,
-            return_root=True
-        )
-        # Calculate move probabilities from visits if root is available
-        if root is not None:
-            probs = [0] * 7
-            candidates = []
-            for move, child in root.children.items():
-                v_count = child.visit_count
-                q_val = child.total_value / v_count if v_count > 0 else 0
-                probs[move] = v_count
-                candidates.append((move, v_count, q_val))
-            
-            # Sort and log top 3 for debugging
-            candidates.sort(key=lambda x: x[1], reverse=True)
-            log_msg = f"AI thinking: " + ", ".join([f"Col {m}(V:{v}, Q:{q:.2f})" for m,v,q in candidates[:3]])
-            logger.debug(log_msg)
-
-            root_val = root.q_value
-            # If position is contested/complex, boost the budget
-            if abs(root_val) < 0.4:
-                simulations = min(2000, int(simulations * 1.5))
-                logger.debug("[Adaptive] Contested position (q=%.2f). Boosting sims to %d", root_val, simulations)
-            # If position is nearly decided, reduce the budget
-            elif abs(root_val) > 0.85:
-                simulations = max(50, int(simulations * 0.5))
-                logger.debug("[Adaptive] Decided position (q=%.2f). Reducing sims to %d", root_val, simulations)
-        else:
-            logger.debug("[Adaptive] Tactical Short-Circuit detected. Bypassing simulation boost.")
-
     # Difficulty: random move chance (easy=2/3, medium=1/3, hard=0).
     # Skip randomness when the position is immediately dangerous — AI must
     # take a winning move or block a human win; a random column would be
     # obviously wrong and frustrating at any difficulty level.
+    # Decided before any search so a random move costs no MCTS time at all.
     random_chance = {"easy": 2/3, "medium": 1/3}.get(difficulty, 0)
     if random_chance > 0 and np.random.random() < random_chance:
         human_player = -game.current_player
@@ -402,19 +409,77 @@ def get_move():
             logger.debug("[Difficulty:%s] Random move → col %d", difficulty, best_move)
             return jsonify({"move": best_move, "probs": [0.0]*7, "winning_cells": []})
 
-    logger.debug("Evaluating board using %s for player %d (sims=%d)", checkpoint_name, current_player, simulations)
+    # The search is deterministic (no Dirichlet noise), so identical
+    # (model, position, player, requested sims) always give the same result.
+    cache_key = ("move", str(checkpoint), board_arr.tobytes(), int(current_player), simulations)
+    cached_probs = _search_cache.get(cache_key)
+    cache_hit = cached_probs is not None
+    inference_time = 0.0
 
-    start_time = time.time()
-    mcts_probs = run_mcts_simulations(
-        game, model, device,
-        num_sims=simulations,
-        temperature=0,             # Greedy, we want the *best* move
-        add_dirichlet_noise=False  # No exploration in production play
-    )
-    inference_time = time.time() - start_time
-    
-    bigquery_tracker.record_telemetry(checkpoint_name, simulations, inference_time)
-    
+    if cache_hit:
+        mcts_probs = cached_probs.copy()
+        logger.debug("[Cache] move hit (sims=%d)", simulations)
+    else:
+        try:
+            # ── Step 6: Dynamic Simulation Budget ──
+            if simulations >= 200:
+                # Run a fast 50-sim pass to estimate position complexity
+                _, root = run_mcts_simulations(
+                    game, model, device,
+                    num_sims=50,
+                    temperature=0,
+                    add_dirichlet_noise=False,
+                    return_root=True,
+                    cancel_check=cancel_check
+                )
+                # Calculate move probabilities from visits if root is available
+                if root is not None:
+                    candidates = []
+                    for move, child in root.children.items():
+                        v_count = child.visit_count
+                        q_val = child.total_value / v_count if v_count > 0 else 0
+                        candidates.append((move, v_count, q_val))
+
+                    # Sort and log top 3 for debugging
+                    candidates.sort(key=lambda x: x[1], reverse=True)
+                    log_msg = "AI thinking: " + ", ".join([f"Col {m}(V:{v}, Q:{q:.2f})" for m, v, q in candidates[:3]])
+                    logger.debug(log_msg)
+
+                    root_val = root.q_value
+                    # If position is contested/complex, boost the budget
+                    if abs(root_val) < 0.4:
+                        simulations_used = min(2000, int(simulations * 1.5))
+                        logger.debug("[Adaptive] Contested position (q=%.2f). Boosting sims to %d", root_val, simulations_used)
+                    # If position is nearly decided, reduce the budget
+                    elif abs(root_val) > 0.85:
+                        simulations_used = max(50, int(simulations * 0.5))
+                        logger.debug("[Adaptive] Decided position (q=%.2f). Reducing sims to %d", root_val, simulations_used)
+                    else:
+                        simulations_used = simulations
+                else:
+                    simulations_used = simulations
+                    logger.debug("[Adaptive] Tactical Short-Circuit detected. Bypassing simulation boost.")
+            else:
+                simulations_used = simulations
+
+            logger.debug("Evaluating board using %s for player %d (sims=%d)", checkpoint_name, current_player, simulations_used)
+
+            start_time = time.time()
+            mcts_probs = run_mcts_simulations(
+                game, model, device,
+                num_sims=simulations_used,
+                temperature=0,             # Greedy, we want the *best* move
+                add_dirichlet_noise=False, # No exploration in production play
+                cancel_check=cancel_check
+            )
+            inference_time = time.time() - start_time
+        except SearchCancelled:
+            logger.debug("[Cancel] move search abandoned (client moved on)")
+            return jsonify({"stale": True})
+
+        bigquery_tracker.record_telemetry(checkpoint_name, simulations_used, inference_time)
+        _search_cache.put(cache_key, mcts_probs.copy())
+
     best_move = int(np.argmax(mcts_probs))
 
     # Opening book: if MCTS picked a historically-losing move in early positions,
@@ -446,6 +511,7 @@ def get_move():
         "move": best_move,
         "probs": [float(p) for p in mcts_probs],
         "inference_time_ms": inference_time * 1000,
+        "cached": cache_hit,
         "winning_cells": winning_cells
     })
 
@@ -479,6 +545,14 @@ def assess_move():
     except (TypeError, ValueError):
         return jsonify({"error": "Invalid simulations value"}), 400
 
+    # Stale-request handling: skip work the client has already moved on from.
+    ref = _request_ref(data, "assess")
+    cancel_check = None
+    if ref:
+        if _requests.register(*ref):
+            return jsonify({"stale": True})
+        cancel_check = lambda: _requests.is_stale(*ref)  # noqa: E731
+
     checkpoint = _resolve_checkpoint(checkpoint_name)
     if not checkpoint:
         return jsonify({"error": "Invalid model"}), 400
@@ -508,12 +582,23 @@ def assess_move():
     # temperature=1.0 gives visit-count proportions, so p_move/max_p is a
     # continuous ratio. temperature=0 returns a one-hot which collapses every
     # non-best move to p=0 and scores everything as either 1 or 5 stars.
-    mcts_probs = run_mcts_simulations(
-        game, model, device,
-        num_sims=simulations,
-        temperature=1.0,
-        add_dirichlet_noise=False
-    )
+    cache_key = ("assess", str(checkpoint), board_arr.tobytes(), int(current_player), simulations)
+    cached_probs = _search_cache.get(cache_key)
+    if cached_probs is not None:
+        mcts_probs = cached_probs.copy()
+    else:
+        try:
+            mcts_probs = run_mcts_simulations(
+                game, model, device,
+                num_sims=simulations,
+                temperature=1.0,
+                add_dirichlet_noise=False,
+                cancel_check=cancel_check
+            )
+        except SearchCancelled:
+            logger.debug("[Cancel] assess search abandoned (client moved on)")
+            return jsonify({"stale": True})
+        _search_cache.put(cache_key, mcts_probs.copy())
 
     max_p = np.max(mcts_probs)
     p_move = mcts_probs[move]

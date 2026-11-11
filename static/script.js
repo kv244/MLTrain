@@ -42,6 +42,29 @@ let _hintTimerId = null;
 // Move ratings run in the background. The token is bumped on every new game,
 // human move and undo, so a rating that arrives late for an older position is dropped.
 let _assessToken = 0;
+
+// ── Server-side cancellation ──
+// Every search request is tagged with this page's random id and a per-kind epoch.
+// The server drops requests that a newer one (or an explicit cancel) has superseded,
+// and stops a running search early instead of finishing work nobody will read.
+const _clientId = (window.crypto && crypto.randomUUID)
+    ? crypto.randomUUID()
+    : (Math.random().toString(36).slice(2) + Date.now().toString(36) + '-client');
+const _epoch = { move: 0, hint: 0, assess: 0 };
+let _gameGen = 0;   // bumped when a game starts; a late AI reply for an older game is ignored
+
+function cancelServerWork(kinds) {
+    const upto = {};
+    kinds.forEach(k => { upto[k] = _epoch[k]; });
+    try {
+        fetch('/api/cancel', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({ client_id: _clientId, upto }),
+            keepalive: true
+        }).catch(() => {});
+    } catch (e) { /* best effort */ }
+}
 // A star rating only needs a rough visit-count ratio, not full playing strength,
 // so it is capped well below the Think Intensity slider.
 const ASSESS_MAX_SIMS = 200;
@@ -109,6 +132,7 @@ document.addEventListener("DOMContentLoaded", () => {
             localStorage.setItem('c4_ratings', _ratingsToggle.checked ? 'on' : 'off');
             if (!_ratingsToggle.checked) {
                 _assessToken++;      // discard any rating still in flight
+                cancelServerWork(['assess']);
                 clearAssessment();
             }
         });
@@ -210,6 +234,8 @@ function startGame(human_role) {
     moveCount = 0;
     moveSequence = [];
     _assessToken++;   // drop any rating still in flight from the previous game
+    _gameGen++;       // ignore a late AI reply that belongs to the previous game
+    cancelServerWork(['move', 'hint', 'assess']);
 
     initBoard();
 
@@ -282,6 +308,8 @@ async function handleColumnClick(c) {
     _board.classList.add('disabled');
     hideHeatmap();
 
+    // Stop the previous rating/hint on the server: the AI's search is about to start.
+    cancelServerWork(['hint', 'assess']);
     // PRE-MOVE: Save state for assessment
     const boardBefore = JSON.parse(JSON.stringify(board));
 
@@ -325,6 +353,7 @@ async function fetchAssessment(prevBoard, move, movingPlayer, token) {
     const sims = Math.min(getSimCount(), ASSESS_MAX_SIMS);
     if (!sims) return null;
 
+    const epoch = ++_epoch.assess;
     try {
         const res = await fetch('/api/assess', {
             method: 'POST',
@@ -334,7 +363,9 @@ async function fetchAssessment(prevBoard, move, movingPlayer, token) {
                 board: prevBoard,
                 move: move,
                 current_player: movingPlayer, 
-                simulations: sims 
+                simulations: sims,
+                client_id: _clientId,
+                epoch: epoch
             })
         });
 
@@ -345,6 +376,7 @@ async function fetchAssessment(prevBoard, move, movingPlayer, token) {
         }
 
         const data = await res.json();
+        if (data.stale) return null;   // the server abandoned it: a newer request replaced it
         // Drop the rating if the game restarted, the move was undone or the human has moved again.
         if (token !== _assessToken) return data;
         if (data.score) {
@@ -575,6 +607,7 @@ async function getHint(auto = false) {
 
     _btnHint.disabled = true;
     _btnHint.innerText = "Thinking...";
+    const epoch = ++_epoch.hint;
 
     try {
         const res = await fetch('/api/move', {
@@ -586,13 +619,17 @@ async function getHint(auto = false) {
                 board: board,
                 current_player: humanPlayer,
                 simulations: auto ? Math.min(getSimCount(), AUTO_HINT_SIMS) : getSimCount(),
-                difficulty: 'hard'  // hints always use the strongest play
+                difficulty: 'hard',  // hints always use the strongest play
+                client_id: _clientId,
+                kind: 'hint',
+                epoch: epoch
             })
         });
         
         if (!res.ok) throw new Error("API failed");
         
         const data = await res.json();
+        if (data.stale) return;   // superseded by a newer hint or a move
         const bestColIdx = data.move;
         
         // Visual Hint
@@ -624,6 +661,7 @@ function undoMove() {
     boardHistory.pop(); // AI state
     const previousState = boardHistory.pop();
     _assessToken++;     // the rated move no longer exists
+    cancelServerWork(['hint', 'assess']);
 
     board = previousState;
     moveCount = Math.max(0, moveCount - 2); // Undo both player and AI move
@@ -651,6 +689,8 @@ function renderBoard() {
 async function triggerAiMove() {
     const difficulty = _difficultySelect.value;
     const sims = getSimCount();
+    const gen = _gameGen;
+    const epoch = ++_epoch.move;
 
     _board.classList.add('disabled');
     updateActionButtons();
@@ -661,7 +701,10 @@ async function triggerAiMove() {
             board: board,
             current_player: currentPlayer,
             simulations: sims,
-            difficulty: difficulty
+            difficulty: difficulty,
+            client_id: _clientId,
+            kind: 'move',
+            epoch: epoch
         };
 
         const res = await fetch('/api/move', {
@@ -671,13 +714,16 @@ async function triggerAiMove() {
             signal: AbortSignal.timeout(90000)  // 90-second watchdog — prevents permanent "AI is thinking" hang
         });
 
+        if (gen !== _gameGen) return;   // a new game started while the AI was thinking
+
         if (!res.ok) {
             endGame(`Error ${res.status}`);
             return;
         }
 
         const data = await res.json();
-        
+        if (gen !== _gameGen || data.stale) return;
+
         if (data.error) {
             alert("AI Error: " + data.error);
             endGame("System Error");
@@ -728,6 +774,7 @@ async function triggerAiMove() {
         updateActionButtons();
 
     } catch (e) {
+        if (gen !== _gameGen) return;
         console.error("Network error fetching AI move", e);
         endGame("Connection Lost");
     }

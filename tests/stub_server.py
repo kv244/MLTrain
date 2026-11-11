@@ -5,12 +5,16 @@ frontend can be tested without a model. Usage: python tests/stub_server.py <port
 """
 import os
 import sys
+import time
 from flask import Flask, jsonify, render_template, request
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 app = Flask(__name__, template_folder=os.path.join(ROOT, "templates"),
             static_folder=os.path.join(ROOT, "static"))
 SIMS = []  # simulations value of each /api/move request
+MOVES = []  # full body of each /api/move and /api/assess request
+CANCELS = []  # body of each /api/cancel request
+DELAY = {"move": 0.0}  # artificial /api/move latency (seconds)
 
 
 @app.route("/")
@@ -32,12 +36,16 @@ def api_info():
 def api_move():
     data = request.get_json()
     SIMS.append(data.get("simulations"))
+    MOVES.append(dict(data, _path="move"))
+    if DELAY["move"]:
+        time.sleep(DELAY["move"])
     cols = [c for c in range(7) if data["board"][0][c] == 0]
     return jsonify({"move": cols[0], "probs": [1 / 7] * 7, "winning_cells": []})
 
 
 @app.route("/api/assess", methods=["POST"])
 def api_assess():
+    MOVES.append(dict(request.get_json(), _path="assess"))
     return jsonify({"score": 4, "comment": "Strong", "ai_quote": "ok", "best_move": 3,
                     "probs": [0.1] * 7, "winning_cells": []})
 
@@ -45,6 +53,23 @@ def api_assess():
 @app.route("/api/move_sims")
 def api_move_sims():
     return jsonify(SIMS)
+
+
+@app.route("/api/cancel", methods=["POST"])
+def api_cancel():
+    CANCELS.append(request.get_json())
+    return jsonify({"ok": True})
+
+
+@app.route("/api/_requests")
+def api_requests():
+    return jsonify({"requests": MOVES, "cancels": CANCELS})
+
+
+@app.route("/api/_delay/<int:ms>")
+def api_delay(ms):
+    DELAY["move"] = ms / 1000.0
+    return jsonify({"ok": True})
 
 
 def _empty():

@@ -210,6 +210,14 @@ def _add_dirichlet_noise(node: MCTSNode, epsilon: float = 0.25):
 
 # ── MCTS search ───────────────────────────────────────────────────────────────
 
+class SearchCancelled(Exception):
+    """Raised inside run_mcts_simulations when cancel_check() reports the search is stale."""
+
+
+# How often (in simulations) a running search polls its cancel_check callback.
+CANCEL_POLL_INTERVAL = 8
+
+
 def run_mcts_simulations(
     game: Connect4, 
     model: torch.nn.Module, 
@@ -220,6 +228,7 @@ def run_mcts_simulations(
     add_dirichlet_noise: bool = True, 
     return_root: bool = False,
     epsilon: float = 0.25,
+    cancel_check=None,
 ) -> np.ndarray:
     # ── TACTICAL OVERRIDE ──
     # (High Performance Short-Circuit Layer)
@@ -256,7 +265,9 @@ def run_mcts_simulations(
     root.backpropagate(value.float().item())
 
     # 4. Standard MCTS iterations
-    for _ in range(num_sims - 1):
+    for i in range(num_sims - 1):
+        if cancel_check is not None and i % CANCEL_POLL_INTERVAL == 0 and cancel_check():
+            raise SearchCancelled()
         node = root
         
         # Selection
