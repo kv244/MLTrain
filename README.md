@@ -366,6 +366,7 @@ Set a threshold (e.g. $20/month) — GCP will email you before you're surprised.
 #### Web App
 
 - **Non-blocking move ratings** (`script.js`, `index.html`): Every human move used to wait for `/api/assess` (a second full MCTS search plus a possible Gemini call) before the AI's reply was even requested, roughly doubling reply time on the single Gunicorn worker. The AI now moves first; the rating is requested once it has replied, with its search capped at 200 simulations (`ASSESS_MAX_SIMS`). A rating that arrives late for an older position (new game, undo, next move) is dropped. Win/draw detection uses the existing local check. A new **Rate my moves** checkbox (remembered in `localStorage`) turns ratings off entirely.
+- **Board scrolls into view on phones** (`script.js`): On a phone the settings panel fills the first screen, so tapping *You Play First* / *AI Plays First* created the board below the fold and nothing appeared to happen. `startGame()` now scrolls the board area into view.
 
 #### Deploy
 
