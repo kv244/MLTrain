@@ -36,7 +36,7 @@ def main():
     try:
         for _ in range(50):
             try:
-                urllib.request.urlopen(BASE + "/api/info", timeout=1)
+                urllib.request.urlopen(BASE + "/api/info", timeout=1)  # nosec B310
                 break
             except Exception:
                 time.sleep(0.2)
@@ -59,7 +59,7 @@ def main():
             page.evaluate("document.getElementById('simsSlider').value = 1600")
             page.click("#btnPlayerFirst")
             page.wait_for_timeout(2000)  # auto-hint fires 500ms after turn starts
-            sims = json.load(urllib.request.urlopen(BASE + "/api/move_sims"))
+            sims = json.load(urllib.request.urlopen(BASE + "/api/move_sims"))  # nosec B310
             check("easy auto-hint uses <= 50 sims", bool(sims) and max(sims) <= 50, f"sims={sims}")
             browser.close()
     finally:
