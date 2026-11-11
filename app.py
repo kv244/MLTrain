@@ -1,5 +1,6 @@
 import os
 import glob
+import contextlib
 import hashlib
 import re
 import time
@@ -303,6 +304,26 @@ _requests = RequestRegistry()
 _search_cache = SearchCache()
 
 
+# Only one MCTS search computes at a time. gunicorn runs a few threads so cheap requests
+# (/api/cancel, stale checks, cache hits) are answered instantly while a search is running,
+# but two searches at once would just fight over the VM's two shared vCPUs (and the GIL)
+# and both finish later. Searches that went stale while waiting are dropped, not run.
+_search_lock = threading.Lock()
+
+
+@contextlib.contextmanager
+def _search_slot(cancel_check=None):
+    while not _search_lock.acquire(timeout=0.05):
+        if cancel_check is not None and cancel_check():
+            raise SearchCancelled()
+    try:
+        if cancel_check is not None and cancel_check():
+            raise SearchCancelled()
+        yield
+    finally:
+        _search_lock.release()
+
+
 def _request_ref(data, default_kind):
     """Pull (client_id, kind, epoch) out of a request body, or None if the client
     did not send valid cancellation info (older cached page -> no cancellation)."""
@@ -421,58 +442,59 @@ def get_move():
         logger.debug("[Cache] move hit (sims=%d)", simulations)
     else:
         try:
-            # ── Step 6: Dynamic Simulation Budget ──
-            if simulations >= 200:
-                # Run a fast 50-sim pass to estimate position complexity
-                _, root = run_mcts_simulations(
-                    game, model, device,
-                    num_sims=50,
-                    temperature=0,
-                    add_dirichlet_noise=False,
-                    return_root=True,
-                    cancel_check=cancel_check
-                )
-                # Calculate move probabilities from visits if root is available
-                if root is not None:
-                    candidates = []
-                    for move, child in root.children.items():
-                        v_count = child.visit_count
-                        q_val = child.total_value / v_count if v_count > 0 else 0
-                        candidates.append((move, v_count, q_val))
+            with _search_slot(cancel_check):
+                # ── Step 6: Dynamic Simulation Budget ──
+                if simulations >= 200:
+                    # Run a fast 50-sim pass to estimate position complexity
+                    _, root = run_mcts_simulations(
+                        game, model, device,
+                        num_sims=50,
+                        temperature=0,
+                        add_dirichlet_noise=False,
+                        return_root=True,
+                        cancel_check=cancel_check
+                    )
+                    # Calculate move probabilities from visits if root is available
+                    if root is not None:
+                        candidates = []
+                        for move, child in root.children.items():
+                            v_count = child.visit_count
+                            q_val = child.total_value / v_count if v_count > 0 else 0
+                            candidates.append((move, v_count, q_val))
 
-                    # Sort and log top 3 for debugging
-                    candidates.sort(key=lambda x: x[1], reverse=True)
-                    log_msg = "AI thinking: " + ", ".join([f"Col {m}(V:{v}, Q:{q:.2f})" for m, v, q in candidates[:3]])
-                    logger.debug(log_msg)
+                        # Sort and log top 3 for debugging
+                        candidates.sort(key=lambda x: x[1], reverse=True)
+                        log_msg = "AI thinking: " + ", ".join([f"Col {m}(V:{v}, Q:{q:.2f})" for m, v, q in candidates[:3]])
+                        logger.debug(log_msg)
 
-                    root_val = root.q_value
-                    # If position is contested/complex, boost the budget
-                    if abs(root_val) < 0.4:
-                        simulations_used = min(2000, int(simulations * 1.5))
-                        logger.debug("[Adaptive] Contested position (q=%.2f). Boosting sims to %d", root_val, simulations_used)
-                    # If position is nearly decided, reduce the budget
-                    elif abs(root_val) > 0.85:
-                        simulations_used = max(50, int(simulations * 0.5))
-                        logger.debug("[Adaptive] Decided position (q=%.2f). Reducing sims to %d", root_val, simulations_used)
+                        root_val = root.q_value
+                        # If position is contested/complex, boost the budget
+                        if abs(root_val) < 0.4:
+                            simulations_used = min(2000, int(simulations * 1.5))
+                            logger.debug("[Adaptive] Contested position (q=%.2f). Boosting sims to %d", root_val, simulations_used)
+                        # If position is nearly decided, reduce the budget
+                        elif abs(root_val) > 0.85:
+                            simulations_used = max(50, int(simulations * 0.5))
+                            logger.debug("[Adaptive] Decided position (q=%.2f). Reducing sims to %d", root_val, simulations_used)
+                        else:
+                            simulations_used = simulations
                     else:
                         simulations_used = simulations
+                        logger.debug("[Adaptive] Tactical Short-Circuit detected. Bypassing simulation boost.")
                 else:
                     simulations_used = simulations
-                    logger.debug("[Adaptive] Tactical Short-Circuit detected. Bypassing simulation boost.")
-            else:
-                simulations_used = simulations
 
-            logger.debug("Evaluating board using %s for player %d (sims=%d)", checkpoint_name, current_player, simulations_used)
+                logger.debug("Evaluating board using %s for player %d (sims=%d)", checkpoint_name, current_player, simulations_used)
 
-            start_time = time.time()
-            mcts_probs = run_mcts_simulations(
-                game, model, device,
-                num_sims=simulations_used,
-                temperature=0,             # Greedy, we want the *best* move
-                add_dirichlet_noise=False, # No exploration in production play
-                cancel_check=cancel_check
-            )
-            inference_time = time.time() - start_time
+                start_time = time.time()
+                mcts_probs = run_mcts_simulations(
+                    game, model, device,
+                    num_sims=simulations_used,
+                    temperature=0,             # Greedy, we want the *best* move
+                    add_dirichlet_noise=False, # No exploration in production play
+                    cancel_check=cancel_check
+                )
+                inference_time = time.time() - start_time
         except SearchCancelled:
             logger.debug("[Cancel] move search abandoned (client moved on)")
             return jsonify({"stale": True})
@@ -588,13 +610,14 @@ def assess_move():
         mcts_probs = cached_probs.copy()
     else:
         try:
-            mcts_probs = run_mcts_simulations(
-                game, model, device,
-                num_sims=simulations,
-                temperature=1.0,
-                add_dirichlet_noise=False,
-                cancel_check=cancel_check
-            )
+            with _search_slot(cancel_check):
+                mcts_probs = run_mcts_simulations(
+                    game, model, device,
+                    num_sims=simulations,
+                    temperature=1.0,
+                    add_dirichlet_noise=False,
+                    cancel_check=cancel_check
+                )
         except SearchCancelled:
             logger.debug("[Cancel] assess search abandoned (client moved on)")
             return jsonify({"stale": True})
@@ -778,13 +801,14 @@ def game_summary():
             # temperature=1.0: probs are proportional to visit counts, giving a
             # continuous quality ratio. temperature=0 collapses to one-hot, which
             # would score every non-best move as quality_ratio=0 (all equal "blunders").
-            probs, root = run_mcts_simulations(
-                game, model, device,
-                num_sims=simulations,
-                temperature=1.0,
-                add_dirichlet_noise=False,
-                return_root=True,
-            )
+            with _search_slot():
+                probs, root = run_mcts_simulations(
+                    game, model, device,
+                    num_sims=simulations,
+                    temperature=1.0,
+                    add_dirichlet_noise=False,
+                    return_root=True,
+                )
 
             # root is None when tactical override fired (forced win/block move).
             # Those are correct-by-definition; skip quality evaluation.
