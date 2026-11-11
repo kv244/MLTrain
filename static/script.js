@@ -563,7 +563,11 @@ function createStardustTrail(col, endRow, player) {
 }
 
 // Step 4: Hint function
-async function getHint() {
+// Auto-hints (easy mode) run on every turn, so they use a light search; the Get Hint
+// button still uses the full Think Intensity.
+const AUTO_HINT_SIMS = 50;
+
+async function getHint(auto = false) {
     if (gameOver || currentPlayer !== humanPlayer) return;
 
     if (_hintAbortController) _hintAbortController.abort();
@@ -581,8 +585,8 @@ async function getHint() {
                 model: _modelSelect.value,
                 board: board,
                 current_player: humanPlayer,
-                simulations: getSimCount(),
-                difficulty: 'hard'  // hints always use full AI
+                simulations: auto ? Math.min(getSimCount(), AUTO_HINT_SIMS) : getSimCount(),
+                difficulty: 'hard'  // hints always use the strongest play
             })
         });
         
@@ -782,7 +786,7 @@ function updateTurnUI() {
         if (_difficultySelect.value === 'easy') {
             _hintTimerId = setTimeout(() => {
                 _hintTimerId = null;
-                if (!gameOver && currentPlayer === humanPlayer) getHint();
+                if (!gameOver && currentPlayer === humanPlayer) getHint(true);
             }, 500);
         }
     } else {
