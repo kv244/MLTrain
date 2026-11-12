@@ -40,3 +40,6 @@ eval_models.py
 !static/og-preview.png
 desktop.ini
 *.ini
+
+# README screenshots
+!docs/screenshots/*.png
