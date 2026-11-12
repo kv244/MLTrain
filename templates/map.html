@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Players around the world | Connect 4 AI</title>
+    <meta name="description" content="Where Connect 4 AI players come from: visitors and games per country.">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="{{ url_for('static', filename='map.css') }}?v={{ version }}">
+</head>
+<body>
+<main>
+    <a class="back" href="/">&larr; Back to the game</a>
+    <h1>Players around the world</h1>
+    <p class="sub" id="summary">Loading&hellip;</p>
+    <canvas id="map" width="1000" height="500" aria-label="Map of visitors per country"></canvas>
+    <table id="list" aria-label="Visitors per country">
+        <thead><tr><th>Country</th><th>Visitors</th><th>Games</th></tr></thead>
+        <tbody></tbody>
+    </table>
+    <p class="note">Counts are per country, from anonymous visit statistics. No individual visitor is shown.</p>
+</main>
+<script src="{{ url_for('static', filename='countries.js') }}?v={{ version }}"></script>
+<script src="{{ url_for('static', filename='map.js') }}?v={{ version }}"></script>
+</body>
+</html>

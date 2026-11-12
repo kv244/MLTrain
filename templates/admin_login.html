@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="robots" content="noindex">
+    <title>Admin login</title>
+    <style>
+        body { background:#050510; color:#c9d1d9; font-family:system-ui,sans-serif; min-height:100vh;
+               display:flex; align-items:center; justify-content:center; margin:0; padding:16px; }
+        form { background:rgba(10,10,25,.85); border:1px solid rgba(0,229,255,.25); border-radius:12px;
+               padding:28px; width:100%; max-width:340px; }
+        h1 { color:#00e5ff; font-size:1.3rem; margin:0 0 18px; }
+        input, button { width:100%; box-sizing:border-box; padding:12px; border-radius:8px; font-size:1rem; }
+        input { background:#0d1117; border:1px solid #30363d; color:#fff; margin-bottom:12px; }
+        button { background:#00e5ff; border:0; color:#001; font-weight:700; cursor:pointer; }
+        .err { color:#ff2d55; margin:0 0 12px; font-size:.9rem; }
+    </style>
+</head>
+<body>
+<form method="post" action="/admin">
+    <h1>Admin</h1>
+    {% if error %}<p class="err">{{ error }}</p>{% endif %}
+    <input type="password" name="token" placeholder="Admin token" autocomplete="current-password" autofocus required>
+    <button type="submit">Sign in</button>
+</form>
+</body>
+</html>
