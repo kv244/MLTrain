@@ -15,8 +15,21 @@ This project implements the AlphaZero algorithm to train a neural network to pla
   <img src="docs/screenshots/game-over.png" alt="c4star.com on a phone: finished game with the winning line highlighted and a 5-star move rating" width="300">
 </p>
 
-**Admin analytics dashboard:** https://c4star.com/admin/`<ADMIN_TOKEN>`
-_(token is set via the `ADMIN_TOKEN` environment variable on the server — see `.env`)_
+**Player map:** https://c4star.com/map _(public, per-country totals)_
+
+**Admin analytics dashboard:** https://c4star.com/admin _(sign in with the `ADMIN_TOKEN` set on the server; the old `/admin/<token>` link still works and redirects here, so the token no longer stays in the URL)_
+
+## Analytics (BigQuery)
+
+Besides serving the game, the app uses **Google BigQuery** (project `gen-lang-client-0269772194`, dataset `connect4`) to track usage. All writes are fire-and-forget background threads, so they never slow a move down.
+
+| Table | What it tracks |
+|---|---|
+| `player_stats` | Per visitor (IP): country, first/last seen, visits, games, wins/losses/draws, moves, games per difficulty. Updated with a `MERGE` upsert on every page load and game end. |
+| `win_records` | Hall of Fame: name, difficulty, simulations, moves and timestamp of each saved win. Feeds the "last winner" line in the welcome toast. |
+| `move_telemetry` | Per-move inference latency (replaced the old `telemetry.csv`). |
+
+The admin dashboard reads these tables. A public **player map** at https://c4star.com/map shows visitors and games per country (aggregates only, never IPs). Winning games also feed the weekly opening-book rebuild. Tracking is skipped when `GCP_PROJECT_ID` is not set (e.g. local runs).
 
 ## Prerequisites
 
@@ -361,7 +374,7 @@ Set a threshold (e.g. $20/month) — GCP will email you before you're surprised.
 - [x] **Monetization:** Ko-fi donation button (`ko-fi.com/c4star`) shown post-game. Facebook share button with pre-populated result message. Carbon Ads application pending.
 - [ ] **User Authentication:** Add a login system to restrict access and save player game statistics.
 - [ ] **Move History:** Add a feature to download or replay past games from the UI.
-- [x] **Real-time Analytics:** BigQuery player analytics implemented — tracks visits, games, win/loss, moves per IP. Admin dashboard at `/admin/<token>`.
+- [x] **Real-time Analytics:** BigQuery player analytics implemented — tracks visits, games, win/loss, moves per IP. Admin dashboard at `/admin` (token login).
 - [x] **Global Player Map:** Geo-IP welcome message now done browser-side (geolocation-db.com whitelisted in CSP) so the client's real IP is used. Includes wallpaper renewal countdown.
 - [x] **Database Integration:** BigQuery replaces the CSV-only telemetry system for structured per-player analytics.
 - [x] **Dynamic Environment:** Successfully implemented via `background_manager.py`. The system automatically generates and rotates high-fidelity cyberpunk backgrounds using the Gemini API and Imagen 4.0 once a week, keeping the UI fresh and modern.
@@ -381,6 +394,9 @@ Set a threshold (e.g. $20/month) — GCP will email you before you're surprised.
 
 ### [Unreleased]
 
+- **Public player map** (`/map`, `/api/country_stats`): visitors and games per country from BigQuery, cached 5 min. Aggregates only; no IPs leave the server.
+- **Admin login** (`/admin`): token entered in a form, kept in a signed HttpOnly 12 h cookie, so it no longer appears in URLs or logs. `/admin/<token>` still works and redirects. Login attempts limited to 10/min.
+- **README:** new Analytics (BigQuery) section.
 - **Stale-work cancellation** (`app.py`, `search_control.py`, `mcts.py`, `script.js`): requests carry a client id, kind and increasing epoch; newer requests and `/api/cancel` mark older ones stale, and running MCTS searches poll a `cancel_check` and abort (`{"stale": true}`). Late AI replies from a previous game are ignored.
 - **Search cache** (`search_control.py`): LRU of 4096 move/assess results keyed by checkpoint, board, player and sims; responses include `cached`.
 - **One search at a time** (`app.py`): a lock serialises searches (concurrent ones only slow each other on 2 vCPUs); queued stale searches are dropped. Random easy/medium moves skip the search entirely. Recommended gunicorn setting: `--workers 1 --worker-class gthread --threads 4`.

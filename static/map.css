@@ -1,0 +1,13 @@
+* { box-sizing: border-box; }
+body { margin: 0; background: #050510; color: #c9d1d9; font-family: 'Inter', system-ui, sans-serif; }
+main { max-width: 1040px; margin: 0 auto; padding: 20px 16px 48px; }
+.back { color: #00e5ff; text-decoration: none; font-size: .9rem; }
+h1 { color: #00e5ff; text-shadow: 0 0 12px #00e5ff; margin: 12px 0 4px; font-size: 1.7rem; }
+.sub { color: #8b949e; margin: 0 0 16px; }
+canvas { width: 100%; height: auto; background: radial-gradient(ellipse at center, #0b1230, #050510);
+         border: 1px solid rgba(0, 229, 255, .25); border-radius: 12px; display: block; }
+table { width: 100%; border-collapse: collapse; margin-top: 20px; font-size: .95rem; }
+th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid rgba(0, 229, 255, .12); }
+th { color: #8b949e; font-weight: 600; }
+td:nth-child(n+2), th:nth-child(n+2) { text-align: right; font-variant-numeric: tabular-nums; }
+.note { color: #6e7681; font-size: .8rem; margin-top: 16px; }

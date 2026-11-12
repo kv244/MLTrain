@@ -2,6 +2,7 @@ import os
 import glob
 import contextlib
 import hashlib
+import hmac
 import re
 import time
 import csv
@@ -12,7 +13,7 @@ import numpy as np
 import pathlib
 import threading
 from collections import OrderedDict
-from flask import Flask, request, jsonify, render_template
+from flask import Flask, request, jsonify, render_template, session, redirect, url_for, abort
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
 from werkzeug.middleware.proxy_fix import ProxyFix
@@ -61,6 +62,17 @@ import background_manager
 import bigquery_tracker
 
 app = Flask(__name__)
+# Admin login session: the cookie is signed with a key derived from ADMIN_TOKEN
+# (no extra secret to manage; rotating the token logs everyone out).
+app.secret_key = hashlib.sha256(
+    ("c4star-admin-session:" + os.environ.get("ADMIN_TOKEN", "unset")).encode()
+).digest()
+app.config.update(
+    SESSION_COOKIE_HTTPONLY=True,
+    SESSION_COOKIE_SECURE=os.environ.get("SESSION_COOKIE_SECURE", "1") == "1",
+    SESSION_COOKIE_SAMESITE="Strict",
+    PERMANENT_SESSION_LIFETIME=datetime.timedelta(hours=12),
+)
 app.config['MAX_CONTENT_LENGTH'] = 64 * 1024
 # x_for=1: trust exactly 1 proxy hop (nginx).
 # Only works correctly because nginx strips client X-Forwarded-For above.
@@ -1123,15 +1135,57 @@ def geoip():
     return jsonify({"wallpaper_days_left": days_left, "bg_mtime": bg_mtime})
 
 # NEW: Dynamic Environment Background Refresh
+def _admin_token():
+    return os.environ.get("ADMIN_TOKEN", "")
+
+
+def _is_admin():
+    """True when the browser holds a valid admin session cookie."""
+    return bool(_admin_token()) and session.get("admin") is True
+
+
+@app.route("/admin", methods=["GET", "POST"])
+@limiter.limit("10 per minute", methods=["POST"])
+def admin_home():
+    """Analytics dashboard behind a login form, so the token never appears in a URL.
+    Unauthenticated visitors get the 404 page (same as before), except that the
+    login form is shown when an admin token is configured."""
+    expected = _admin_token()
+    if not expected:
+        abort(404)
+    if request.method == "POST":
+        supplied = request.form.get("token", "")
+        if hmac.compare_digest(supplied.encode(), expected.encode()):
+            session.clear()
+            session["admin"] = True
+            session.permanent = True
+            return redirect(url_for("admin_home"))
+        return render_template("admin_login.html", error="Wrong token."), 401
+    if not _is_admin():
+        return render_template("admin_login.html", error=None)
+    return _render_admin_dashboard()
+
+
+@app.route("/admin/logout", methods=["POST"])
+def admin_logout():
+    session.clear()
+    return redirect(url_for("admin_home"))
+
+
 @app.route("/admin/<token>")
 def admin_dashboard(token):
-    """Analytics dashboard — access restricted to holders of ADMIN_TOKEN in URL.
-    Returns 404 (not 403) to avoid revealing the endpoint exists."""
-    expected = os.environ.get("ADMIN_TOKEN", "")
-    if not expected or token != expected:
-        from flask import abort
+    """Legacy token-in-URL entry. A valid token now starts a session and redirects
+    to /admin so the token leaves the address bar. Invalid -> 404."""
+    expected = _admin_token()
+    if not expected or not hmac.compare_digest(token.encode(), expected.encode()):
         abort(404)
+    session.clear()
+    session["admin"] = True
+    session.permanent = True
+    return redirect(url_for("admin_home"))
 
+
+def _render_admin_dashboard():
     rows, daily, totals, error = [], [], {}, None
     if bigquery_tracker._enabled:
         try:
@@ -1195,8 +1249,52 @@ def admin_dashboard(token):
 
     return render_template("admin.html",
                            rows=rows, daily=daily, totals=totals, error=error,
-                           admin_token=token)
+                           admin_token=_admin_token())
 
+
+
+# ── Public visitor map (aggregated by country; never exposes IPs) ─────────────
+_country_cache = {"ts": 0.0, "data": None}
+_country_lock = threading.Lock()
+COUNTRY_CACHE_SECONDS = 300
+
+
+@app.route("/map")
+def visitor_map():
+    return render_template("map.html", version=VERSION)
+
+
+@app.route("/api/country_stats")
+@limiter.limit("30 per minute")
+def country_stats():
+    """Visitors and games per country. Aggregates only: no IPs, no per-visitor rows."""
+    now = time.time()
+    with _country_lock:
+        if _country_cache["data"] is not None and now - _country_cache["ts"] < COUNTRY_CACHE_SECONDS:
+            return jsonify(_country_cache["data"])
+    countries, error = [], None
+    if bigquery_tracker._enabled:
+        try:
+            rows = bigquery_tracker._client.query(f"""
+                SELECT COALESCE(NULLIF(country, ''), 'Unknown') AS country,
+                       COUNT(*) AS visitors,
+                       SUM(total_games) AS games
+                FROM `{bigquery_tracker._table_ref}`
+                GROUP BY country
+                ORDER BY visitors DESC
+            """).result()
+            countries = [{"country": r["country"], "visitors": int(r["visitors"]),
+                          "games": int(r["games"] or 0)} for r in rows]
+        except Exception as exc:
+            logger.warning("country_stats query failed: %s", exc)
+            error = "unavailable"
+    else:
+        error = "unavailable"
+    data = {"countries": countries, "error": error}
+    if error is None:
+        with _country_lock:
+            _country_cache.update(ts=now, data=data)
+    return jsonify(data)
 
 _bg_update_state = {"running": False, "last_result": None}  # guarded by GIL (single worker)
 
@@ -1302,7 +1400,7 @@ def bg_status():
 def set_security_headers(response):
     # Admin page uses inline <style>/<script> and is already gated by a secret
     # token — skip CSP so those blocks are not silently blocked by the browser.
-    if request.path.startswith("/admin/"):
+    if request.path == "/admin" or request.path.startswith("/admin/"):
         response.headers['X-Content-Type-Options'] = 'nosniff'
         response.headers['X-Frame-Options'] = 'DENY'
         response.headers['Referrer-Policy'] = 'strict-origin-when-cross-origin'
