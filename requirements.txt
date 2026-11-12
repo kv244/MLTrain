@@ -10,7 +10,6 @@ networkx
 python-dotenv
 torch
 scipy
-google-cloud-aiplatform
 google-genai
 google-cloud-bigquery
 google-cloud-logging

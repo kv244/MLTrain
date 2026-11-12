@@ -30,6 +30,16 @@ class AdminAndMap(unittest.TestCase):
         self.c.post("/admin/logout")
         self.assertIn(b"Sign in", self.c.get("/admin").data)
 
+    def test_admin_api_uses_session_not_url_token(self):
+        c = appmod.app.test_client()
+        self.assertEqual(c.get("/api/admin/bg_status").status_code, 401)
+        self.assertEqual(c.get("/api/admin/bg_status?token=unit-test-token").status_code, 401)  # no token in URLs
+        c.post("/admin", data={"token": "unit-test-token"})
+        self.assertEqual(c.get("/api/admin/bg_status").status_code, 200)
+        self.assertNotIn(b"unit-test-token", c.get("/admin").data)
+        c.post("/admin/logout")
+        self.assertEqual(c.get("/api/admin/bg_status").status_code, 401)
+
     def test_legacy_token_url_redirects_without_token(self):
         r = self.c.get("/admin/unit-test-token")
         self.assertEqual(r.status_code, 302)

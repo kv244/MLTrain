@@ -18,12 +18,11 @@ from pathlib import Path
 
 import numpy as np
 import torch
-import torch.nn.functional as F
 import matplotlib.pyplot as plt
 import matplotlib.patches as mpatches
 
 from model import AlphaNet
-from mcts import Connect4, MCTSNode, board_to_tensor, run_mcts_simulations
+from mcts import Connect4, MCTSNode, run_mcts_simulations
 
 
 # ── Model loading (mirrors visualize.py) ─────────────────────────────────────
