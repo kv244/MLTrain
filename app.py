@@ -239,7 +239,6 @@ def log_game_end():
     winner        = data.get("winner",     "unknown")
     model_version = data.get("model",      "unknown")
     moves         = data.get("moves",      0)
-    country       = data.get("country",    "")
     difficulty    = data.get("difficulty", "hard")
     ip            = request.remote_addr
 
@@ -1144,6 +1143,17 @@ def _is_admin():
     return bool(_admin_token()) and session.get("admin") is True
 
 
+def _authorised_admin_call(supplied_token=""):
+    """Admin API auth: the logged-in admin session, or the ADMIN_TOKEN itself
+    (sent in a POST body, for scheduled jobs such as the Cloud Scheduler rebuild)."""
+    expected = _admin_token()
+    if not expected:
+        return False
+    if _is_admin():
+        return True
+    return hmac.compare_digest(str(supplied_token).encode(), expected.encode())
+
+
 @app.route("/admin", methods=["GET", "POST"])
 @limiter.limit("10 per minute", methods=["POST"])
 def admin_home():
@@ -1248,8 +1258,7 @@ def _render_admin_dashboard():
         error = "BigQuery not configured (GCP_PROJECT_ID missing)."
 
     return render_template("admin.html",
-                           rows=rows, daily=daily, totals=totals, error=error,
-                           admin_token=_admin_token())
+                           rows=rows, daily=daily, totals=totals, error=error)
 
 
 
@@ -1305,9 +1314,8 @@ _book_build_state = {"running": False, "last_result": None}
 def rebuild_opening_book():
     """Rebuild opening_book.json from human-win games in BigQuery.
     Token is sent in the request body (not the URL) to keep it out of server logs."""
-    expected_token = os.environ.get("ADMIN_TOKEN")
     data = request.get_json(silent=True) or {}
-    if not expected_token or data.get("token", "") != expected_token:
+    if not _authorised_admin_call(data.get("token", "")):
         return jsonify({"error": "Unauthorized"}), 401
 
     if _book_build_state["running"]:
@@ -1353,9 +1361,8 @@ def rebuild_opening_book():
 def refresh_background():
     """Start a background image update in a daemon thread and return immediately.
     Token is sent in the request body (not the URL) to keep it out of server logs."""
-    expected_token = os.environ.get("ADMIN_TOKEN")
     data = request.get_json(silent=True) or {}
-    if not expected_token or data.get("token", "") != expected_token:
+    if not _authorised_admin_call(data.get("token", "")):
         return jsonify({"error": "Unauthorized"}), 401
 
     if _bg_update_state["running"]:
@@ -1382,8 +1389,7 @@ def refresh_background():
 @limiter.limit("30 per minute")
 def bg_status():
     """Poll endpoint: returns current bg mtime and whether an update is running."""
-    expected_token = os.environ.get("ADMIN_TOKEN")
-    if request.args.get("token", "") != expected_token:
+    if not _authorised_admin_call():
         return jsonify({"error": "Unauthorized"}), 401
     mtime = None
     try:

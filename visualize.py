@@ -20,7 +20,7 @@ from pathlib import Path
 import networkx as nx
 
 from model import AlphaNet
-from mcts import Connect4, board_to_tensor, print_board, MCTSNode
+from mcts import Connect4, board_to_tensor, MCTSNode
 
 # Optional accelerated CPU ONNX support (OpenVINO preferred, then ONNXRuntime)
 try:
@@ -235,7 +235,7 @@ def visualize_board_and_inference(model: AlphaNet, game: Connect4, output_dir: s
         for c in range(7):
             board_display[r, c] = board[r, c]
     
-    im1 = ax1.imshow(board_display, cmap='RdBu', vmin=-1, vmax=1, alpha=0.3)
+    ax1.imshow(board_display, cmap='RdBu', vmin=-1, vmax=1, alpha=0.3)
     ax1.set_xticks(range(7))
     ax1.set_yticks(range(6))
     ax1.set_xticklabels(range(7))

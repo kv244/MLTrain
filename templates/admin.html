@@ -147,7 +147,7 @@ async function refreshBackground() {
         const res = await fetch('/api/admin/refresh_background', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ token: '{{ admin_token }}' })
+            body: JSON.stringify({})
         });
         const data = await res.json();
         if (!res.ok && res.status !== 202) {
@@ -177,7 +177,7 @@ async function refreshBackground() {
         status.textContent = 'Generating' + '.'.repeat(dots + 1) + ' (Gemini → Imagen, ~30–60s)';
 
         try {
-            const r = await fetch('/api/admin/bg_status?token={{ admin_token }}');
+            const r = await fetch('/api/admin/bg_status');
             const d = await r.json();
 
             const done = !d.running && d.last_result !== null;
