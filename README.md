@@ -9,6 +9,12 @@ This project implements the AlphaZero algorithm to train a neural network to pla
 
 **Game:** https://c4star.com
 
+<p align="center">
+  <img src="docs/screenshots/settings.png" alt="c4star.com on a phone: AI difficulty, Think Intensity slider and Rate my moves option" width="300">
+  &nbsp;&nbsp;
+  <img src="docs/screenshots/game-over.png" alt="c4star.com on a phone: finished game with the winning line highlighted and a 5-star move rating" width="300">
+</p>
+
 **Admin analytics dashboard:** https://c4star.com/admin/`<ADMIN_TOKEN>`
 _(token is set via the `ADMIN_TOKEN` environment variable on the server — see `.env`)_
 
