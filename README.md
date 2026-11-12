@@ -392,7 +392,7 @@ Set a threshold (e.g. $20/month) — GCP will email you before you're surprised.
 
 ## Version History
 
-### [Unreleased]
+### [v2.3.0] - 2026-11-12
 
 - **Public player map** (`/map`, `/api/country_stats`): visitors and games per country from BigQuery, cached 5 min. Aggregates only; no IPs leave the server.
 - **Admin login** (`/admin`): token entered in a form, kept in a signed HttpOnly 12 h cookie, so it no longer appears in URLs or logs. `/admin/<token>` still works and redirects. Login attempts limited to 10/min.

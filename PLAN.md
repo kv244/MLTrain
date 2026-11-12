@@ -22,7 +22,7 @@ Status: proposed (2026-11-11). Items map to the "Planned" list in the README roa
 |---|------|-----------|
 | 8 | Disk monitoring | Cron log confirms the Nov 15 run; deploy summary prints free MB |
 | 9 | Model health check | Deploy fails (and rolls back) if `/api/models` is empty |
-| 10 | Version | Rename README entry v2.2.2 to v2.3.0 if the ratings toggle counts as a feature release (decision pending) |
+| 10 | Version | Released as v2.3.0 (cancellation, cache, public map and admin login are feature changes) |
 
 ## Phase 4: Testing
 | # | Item | Done when |
