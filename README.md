@@ -18,6 +18,18 @@ This project implements the AlphaZero algorithm to train a neural network to pla
 **Admin analytics dashboard:** https://c4star.com/admin/`<ADMIN_TOKEN>`
 _(token is set via the `ADMIN_TOKEN` environment variable on the server — see `.env`)_
 
+## Analytics (BigQuery)
+
+Besides serving the game, the app uses **Google BigQuery** (project `gen-lang-client-0269772194`, dataset `connect4`) to track usage. All writes are fire-and-forget background threads, so they never slow a move down.
+
+| Table | What it tracks |
+|---|---|
+| `player_stats` | Per visitor (IP): country, first/last seen, visits, games, wins/losses/draws, moves, games per difficulty. Updated with a `MERGE` upsert on every page load and game end. |
+| `win_records` | Hall of Fame: name, difficulty, simulations, moves and timestamp of each saved win. Feeds the "last winner" line in the welcome toast. |
+| `move_telemetry` | Per-move inference latency (replaced the old `telemetry.csv`). |
+
+The admin dashboard (`/admin/<ADMIN_TOKEN>`) reads these tables. Winning games also feed the weekly opening-book rebuild. Tracking is skipped when `GCP_PROJECT_ID` is not set (e.g. local runs).
+
 ## Prerequisites
 
 - Python 3.10+
