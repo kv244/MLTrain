@@ -626,7 +626,7 @@ async function getHint(auto = false) {
             })
         });
         
-        if (!res.ok) throw new Error("API failed");
+        if (!res.ok) throw new Error(await apiErrorDetail(res));
         
         const data = await res.json();
         if (data.stale) return;   // superseded by a newer hint or a move
@@ -641,7 +641,10 @@ async function getHint(auto = false) {
             setTimeout(() => colEl.classList.remove('best-move-hint'), 3000);
         }
     } catch (e) {
-        if (e.name !== 'AbortError') console.error("Hint failed", e);
+        if (e.name !== 'AbortError') {
+            console.error("Hint failed", e);
+            if (!auto) alert("Hint could not be fetched.\n" + e.message);
+        }
     } finally {
         _hintAbortController = null;
         _btnHint.disabled = false;
@@ -717,6 +720,9 @@ async function triggerAiMove() {
         if (gen !== _gameGen) return;   // a new game started while the AI was thinking
 
         if (!res.ok) {
+            const detail = await apiErrorDetail(res);
+            console.error("Move API error:", detail);
+            alert("The AI could not move.\n" + detail);
             endGame(`Error ${res.status}`);
             return;
         }
@@ -846,6 +852,18 @@ function updateTurnUI() {
 function updateActionButtons() {
     if (_btnHint) _btnHint.disabled = gameOver || currentPlayer !== humanPlayer;
     if (_btnUndo) _btnUndo.disabled = gameOver || currentPlayer !== humanPlayer || boardHistory.length < 2;
+}
+
+// Turn a failed fetch Response into a readable message that includes the server's
+// error details (e.g. the rate limit that was hit), so the player can see why.
+async function apiErrorDetail(res) {
+    let body = {};
+    try { body = await res.json(); } catch (_) { /* no JSON body */ }
+    const detail = body.description || body.error || body.message || res.statusText || "";
+    const advice = res.status === 429
+        ? " Too many requests from this connection. Wait about a minute, then try again."
+        : "";
+    return `HTTP ${res.status}${detail ? ": " + detail : ""}.${advice}`;
 }
 
 function endGame(message, winningLine = null) {
