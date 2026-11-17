@@ -369,6 +369,39 @@ Set a budget alert so you're notified before costs spiral:
 
 Set a threshold (e.g. $20/month) — GCP will email you before you're surprised. The e2-medium is a fixed ~$25/month with no autoscaling, so the real risk is CPU overload slowing the app, not an unbounded bill.
 
+#### Why a request can return HTTP 429
+
+The Flask app answers over-limit requests with status `429` and a JSON body such as:
+
+```json
+{"error": "Too Many Requests", "description": "15 per 1 minute"}
+```
+
+The `description` is the limit that was hit. The game shows it in an alert, e.g. `HTTP 429: 15 per 1 minute. Too many requests from this connection…`. An HTML error page instead means the 429 came from Cloudflare, not the app. (The nginx layer above returns `503` on over-limit, not `429`, unless `limit_req_status 429;` is added.)
+
+Limits are per client IP and per server process. The defaults:
+
+| Endpoint(s) | Limit |
+|---|---|
+| `/api/move`, `/api/assess`, `/api/info`, `/api/models`, and any route without its own limit | `RATE_LIMIT` env, default `500 per day;200 per hour;15 per minute` |
+| `/api/cancel` | 120 per minute |
+| `/api/session`, `/api/stats`, `/api/recent_winner`, `/api/leaderboard`, `/api/country_stats` | 30 per minute |
+| `/api/welcome_strings` | 60 per minute |
+| `/api/geoip` | 10 per minute |
+| `/api/game_end` | 60 per hour |
+| `/api/record_win`, `/api/game_summary` | 10 per hour |
+| Admin login (`POST /admin`) | 10 per minute |
+| Admin rebuild / background refresh | 2 per minute |
+
+Common causes:
+
+1. **Fast play with ratings on.** Every turn sends a move and a rating, and in easy mode the auto-hint sends another search. Quick players can pass 15 requests per minute under the default limit.
+2. **Shared IP address.** Mobile carriers, offices and cafés put many people behind one public IP, and they all share its bucket. This makes the 429 appear at random.
+3. **Several tabs or quick reloads.** Each page load calls `/api/session`, `/api/stats`, `/api/recent_winner` and `/api/geoip` (10 per minute), so repeated reloads can exhaust that limit.
+4. **Counters are in memory.** Restarting the service clears them, and with more than one worker each worker counts separately. See the Redis note above.
+
+To raise the default limit on the server, set `RATE_LIMIT` in the service environment (for example `RATE_LIMIT="300 per minute;3000 per hour;20000 per day"`), then `sudo systemctl daemon-reload && sudo systemctl restart connect4`. Waiting one minute clears a per-minute limit.
+
 ### 🚀 Future Roadmap & TODOs
 - [x] **Secure Connection (HTTPS):** Domain `c4star.com` registered and proxied through Cloudflare. Origin secured with a Cloudflare Origin Certificate on nginx (Full Strict SSL mode). HTTP redirects to HTTPS.
 - [x] **Monetization:** Ko-fi donation button (`ko-fi.com/c4star`) shown post-game. Facebook share button with pre-populated result message. Carbon Ads application pending.
