@@ -1,5 +1,11 @@
 # Connect 4 AlphaZero on RTX 4070
 
+<p align="center">
+  <img src="docs/screenshots/IMG_7972.jpeg"
+       alt="A physical Connect Four game with a blue board and red and yellow counters on a wooden table."
+       width="500">
+</p>
+
 [![Deploy to GCP VM](https://github.com/kv244/MLTrain/actions/workflows/deploy.yml/badge.svg)](https://github.com/kv244/MLTrain/actions/workflows/deploy.yml)
 [![Lint Codebase](https://github.com/kv244/MLTrain/actions/workflows/lint.yml/badge.svg)](https://github.com/kv244/MLTrain/actions/workflows/lint.yml)
 
