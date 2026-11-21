@@ -1,0 +1,46 @@
+name: Add README photo once
+on:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/add-readme-photo.yml']
+permissions:
+  contents: write
+jobs:
+  update-readme:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+      - name: Insert photo and remove this workflow
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import hashlib
+          p = Path('README.md')
+          original = p.read_bytes()
+          blob_sha = hashlib.sha1(b'blob ' + str(len(original)).encode() + b'\0' + original).hexdigest()
+          expected = '5aa8ecfa063cbaa7ed2d85cd4a44947c9eb60468'
+          if blob_sha != expected:
+              raise SystemExit('README changed; refusing to overwrite it.')
+          photo = Path('docs/screenshots/IMG_7972.jpeg')
+          if not photo.is_file():
+              raise SystemExit('Photo missing; no changes made.')
+          heading = b'# Connect 4 AlphaZero on RTX 4070\n\n'
+          if not original.startswith(heading):
+              raise SystemExit('Unexpected README heading; no changes made.')
+          image = (
+              b'<p align="center">\n'
+              b'  <img src="docs/screenshots/IMG_7972.jpeg"\n'
+              b'       alt="A physical Connect Four game with a blue board and red and yellow counters on a wooden table."\n'
+              b'       width="500">\n'
+              b'</p>\n\n'
+          )
+          p.write_bytes(heading + image + original[len(heading):])
+          Path('.github/workflows/add-readme-photo.yml').unlink()
+          PY
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add README.md .github/workflows/add-readme-photo.yml
+          git commit -m 'docs: show real-life Connect Four photo below README title'
+          git push origin HEAD:main
